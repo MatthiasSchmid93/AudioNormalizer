@@ -1,0 +1,128 @@
+import warnings
+
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+import numpy as np
+from pydub import AudioSegment
+from alive_progress import alive_bar
+from scipy.io.wavfile import write
+
+
+SAMPLERATE = 44100
+# List for found peaks
+peak_lst = []
+# List where peaks are located in wav array by index
+peak_lst_index = []
+# List for peaks with start and end index (left signal)
+look_lst_left = []
+# List for peaks with start and end index (right signal)
+look_lst_right = []
+# Variable for iterating
+jump = 0
+
+# Get audio signal as 2D numpy array
+wav = np.array(
+    AudioSegment.from_wav("test.wav").get_array_of_samples(), dtype=np.int16
+).reshape(-1, 2)
+# Split signal to left and right and convert all negative values to positive
+wav_left, wav_right = [abs(k) for k in np.split(wav, 2, axis=1)]
+# Split original signal 
+wav_left_org, wav_right_org = np.split(wav, 2, axis=1)
+# Pack original arrays in list
+stereo_org = [wav_left_org, wav_right_org]
+# Pack postitive signal arrays in list
+stereo = [wav_left, wav_right]
+# Copy of original array for manipulation
+wav_deleted_peaks = np.column_stack((wav_left, wav_right))
+# Excecute two times for left and right signal
+for x in range(2):
+    # Find peaks
+    while True:
+        if jump > len(stereo[x]):
+            jump = 0
+            break
+        else:
+            # Split array in block of 44100 samples = 1 sec
+            block = stereo[x][jump : jump + 44100]
+            # Find index of peak in block
+            max = np.where(block == block.max())[0][0] + jump
+            # Append index of peak to index list
+            peak_lst_index.append(max)
+            # Append value of peak to peak list
+            peak_lst.append(block.max())
+            # Jump to next block
+            jump += 44100
+    
+    # Calculate average of all found peaks        
+    average = int((sum(peak_lst)) / len(peak_lst) / 1.1)
+
+    # Delete all peaks that are under average peak
+    for i, y in enumerate(peak_lst):
+        if y < average:
+            # Replace peak under average with value of 40.000. 40.000 is above the maximum of 16-bit resolution audio and is unique
+            peak_lst[i] = 40000
+            peak_lst_index[i] = 40000
+    
+    # Delete all values with 40.000
+    peak_lst = list(filter(lambda num: num != 40000, peak_lst))
+    peak_lst_index = list(filter(lambda num: num != 40000, peak_lst_index))
+
+    with alive_bar(len(peak_lst_index)) as bar:
+        # Find window in where the peak sits
+        for i, y in enumerate(peak_lst_index):
+            # Iterate back until audio singal rises again 
+            while True:
+                if stereo[x][y] < stereo[x][y - 1]:
+                    # Set start index
+                    look_back = y
+                    y = peak_lst_index[i]
+                    break
+                y -= 1
+            # Iterate forward until audio singal rises again
+            while True:
+                if stereo[x][y] < stereo[x][y + 1]:
+                    # Set end index
+                    look_forward = y
+                    break
+                y += 1
+            # Append list of peak with start and end index
+            if x == 0:
+                look_lst_left.append([look_back, look_forward])
+            else:
+                look_lst_right.append([look_back, look_forward])
+            bar()
+look_lsts = [look_lst_left, look_lst_right]
+print(look_lsts[1])
+for x in range(2):
+    lst = []
+    for y in range(len(look_lsts[x])):
+        stereo[x][look_lsts[x][y][0] : look_lsts[x][y][1]] = 0
+    global_peak = 32767 / stereo[x].max()
+    with alive_bar(len(look_lsts[x])) as bar:
+        for i in range(len(look_lsts[x])):
+            lst.append(stereo_org[x][look_lsts[x][i][0] : look_lsts[x][i][1]])
+            try:
+                lst.append(
+                    np.array(
+                        stereo_org[x][look_lsts[x][i][1] : look_lsts[x][i + 1][0]] * global_peak,
+                        dtype=np.int16,
+                    )
+                )
+            except:
+                pass
+            bar()
+    lst.insert(0, np.array(stereo_org[x][0 : look_lsts[x][0][0]] * global_peak, dtype=np.int16))
+    lst.insert(
+        len(lst),
+        np.array(
+            stereo_org[x][look_lsts[x][len(look_lsts[x]) - 1][1] : len(stereo_org[x])] * global_peak,
+            dtype=np.int16,
+        ),
+    )
+    if x == 0:
+        wav_new_left = np.concatenate((lst), axis=0, dtype=np.int16)
+    if x == 1:
+        wav_new_right = np.concatenate((lst), axis=0, dtype=np.int16)
+
+print(len(wav_new_left))
+print(len(wav_new_right))
+write("first_sine_wave.wav", SAMPLERATE, wav_new_left)
