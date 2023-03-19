@@ -6,7 +6,7 @@ from pydub import AudioSegment
 from alive_progress import alive_bar
 from scipy.io.wavfile import write
 
-
+s
 class var:
     FILE = "test.wav"
     SAMPLERATE = 44100
