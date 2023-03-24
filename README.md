@@ -3,7 +3,7 @@
 #### Description:
 This is a normaliser for mp3 and wav files. Its a final project for Havard CS50P.
 
-The approach in this program to normalize audio differs in comparison to most other programs that use this task. Most normalizers amplify an audio signal       until the highest transient reaches 0 dB. The downside of this approach is that the audio signal can only be amplified based on a single maximum transient.     In other words, the whole normalizing process depends on one transient, which is inefficient.
+The approach in this program to normalize audio differs in comparison to most other programs that implement this task. Most normalizers amplify an audio signal  until the highest transient reaches 0 dB. The downside of this approach is that the audio signal can only be amplified based on a single maximum transient.     In other words, the whole normalizing process depends on one transient, which is inefficient.
 
 This program, however, doesn't depend on a single transient. It rather splits the original signal into four separate signals (left positive, left negative,     right positive, and right negative). Then it uses an algorithm that finds several transients that exceed a calculated value based on the audio file's           duration and actual volume. For each split signal, a copy is being created, a dummy signal. In the dummy signals, the found transients are turned into the       value of zero. The next task is to find the new maximum transient in each modified dummy signal like any other simple normalizer. The new maximum value is       then saved for the final amplification.
 
