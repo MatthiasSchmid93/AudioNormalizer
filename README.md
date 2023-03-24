@@ -1,4 +1,4 @@
-# Audio Normaliser
+# Audio Normalizer
 #### Video Demo:  <URL HERE>
 #### Description:
 This is a normalizer for mp3 and wav files. Its a final project for Havard CS50P.
