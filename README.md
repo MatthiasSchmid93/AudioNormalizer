@@ -1,7 +1,7 @@
 # Audio Normaliser
 #### Video Demo:  <URL HERE>
 #### Description:
-This is a normaliser for mp3 and wav files. Its a final project for Havard CS50P.
+This is a normalizer for mp3 and wav files. Its a final project for Havard CS50P.
 
 The approach in this program to normalize audio differs in comparison to most other programs that implement this task. Most normalizers amplify an audio signal  until the highest transient reaches 0 dB. The downside of this approach is that the audio signal can only be amplified based on a single maximum transient.     In other words, the whole normalizing process depends on one transient, which is inefficient.
 
