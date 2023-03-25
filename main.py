@@ -24,20 +24,20 @@ class File:
         "Track number": "TRCK",
         "Genre": "TCON",
     }
-    
-    
+
+
 def check_file(file):
     try:
         with open(file) as _: pass
-    except (FileNotFoundError, PermissionError): return False
+    except (FileNotFoundError, PermissionError, IsADirectoryError): return False
     if matches := re.search(r"(.+)\.(.+)$", file):
         if matches.group(2) == "mp3" or matches.group(2) == "wav":
             File.filename = matches.group(1)
             File.type = matches.group(2)
             return True
     else: return False
-    
-    
+
+
 def open_audio(file):
     if File.type == "mp3":
         audio = AudioSegment.from_mp3(file)
@@ -52,26 +52,27 @@ def remove_backround_noise(signal_arr):
     signal_arr[signal_arr == 1] = 0
     signal_arr[signal_arr == -1] = 0
 
-    
-def split_audio_signal(signal_arr):
-    
+
+def split_signal_arr(signal_arr):
+
+    def replace_under(arr, value):
+        arr[arr < value]
+
+    def replace_above_equal(arr, value):
+        arr[arr >= value]
+
+    def negative_to_positive_arr(arr):
+        return abs(arr)
+
     signal_left_org, signal_right_org = np.split(signal_arr, 2, axis=1)
 
-    left_positive = np.array(signal_left_org, dtype=np.int32)
-    left_negative = np.array(signal_left_org, dtype=np.int32)
-    right_positive = np.array(signal_right_org, dtype=np.int32)
-    right_negative = np.array(signal_right_org, dtype=np.int32)
-
-    # replace positve ints with 1 and vice versa
-    # in negative arr 0 is also replaced for later merging 
-    left_positive[left_positive < 0] = 1
-    left_negative[left_negative >= 0] = -1
-    right_positive[right_positive < 0] = 1
-    right_negative[right_negative >= 0] = -1
-    
-    # Turn negative ints to postive for simplicity
-    left_negative = abs(left_negative)
-    right_negative = abs(right_negative)
+    # Replace positve ints with 1 and vice versa
+    # In negative arr, 0 is also replaced for later merging
+    # Turn negative ints to postive for simplicit
+    left_positive = replace_under(np.array(signal_left_org, dtype=np.int32), 1)
+    left_negative = negative_to_positive_arr(replace_above_equal(np.array(signal_left_org, dtype=np.int32), -1))
+    right_positive = replace_under(np.array(signal_right_org, dtype=np.int32), 1)
+    right_negative = negative_to_positive_arr(replace_above_equal(np.array(signal_right_org, dtype=np.int32), -1))
 
     split_signal = [
         left_positive,
@@ -155,12 +156,12 @@ def find_amplitudes(split_signal, transients):
 
 
 def amplify(split_signal, split_signal_copy, amplitudes):
-    
+
     def find_global_peak(split_signal_copy, amplitudes, x):
         for i in range(len(amplitudes[x])):
             split_signal_copy[x][amplitudes[x][i][0] : amplitudes[x][i][1]] = 0
         return 32767 / split_signal_copy[x].max()
-    
+
     def _amplify(split_signal, start, end, factor):
         split_signal[start:end][split_signal[start:end] > 2] = (
             split_signal[start:end][split_signal[start:end] > 2] * factor
@@ -170,7 +171,7 @@ def amplify(split_signal, split_signal_copy, amplitudes):
         global_peak = find_global_peak(split_signal_copy, amplitudes, x)
         first_tran = amplitudes[x][0][0]
         _amplify(split_signal[x], 0, first_tran, global_peak)
-        with alive_bar(len(amplitudes[x]), title="Normalising") as bar:
+        with alive_bar(len(amplitudes[x]), title="Normalizing") as bar:
             for i in range(len(amplitudes[x])):
                 start_tran = amplitudes[x][i][0]
                 end_tran = amplitudes[x][i][1]
@@ -196,20 +197,26 @@ def amplify(split_signal, split_signal_copy, amplitudes):
 def check_for_cliping(split_signal):
     for i in range(4):
         split_signal[i][split_signal[i] > 32767] = 32767
-        
+
 
 def merge_split_signal(split_signal):
-    
-    split_signal[1] = np.negative(split_signal[1])
-    split_signal[3] = np.negative(split_signal[3])
+
+    def delete_in_arr(arr, values):
+        for value in values:
+            arr = np.delete(arr, np.where(signal_left == value))
+        return arr
+
+    def positive_to_negative_arr(arr):
+        return np.negative(arr)
+
+    split_signal[1] = positive_to_negative_arr(split_signal[1])
+    split_signal[3] = positive_to_negative_arr(split_signal[3])
 
     signal_left = (np.array([split_signal[0], split_signal[1]], dtype=np.int16).transpose().flatten())
     signal_right = (np.array([split_signal[2], split_signal[3]], dtype=np.int16).transpose().flatten())
 
-    signal_left = np.delete(signal_left, np.where(signal_left == -1))
-    signal_right = np.delete(signal_right, np.where(signal_right == -1))
-    signal_left = np.delete(signal_left, np.where(signal_left == 1))
-    signal_right = np.delete(signal_right, np.where(signal_right == 1))
+    signal_left = delete_in_arr(signal_left, [1, -1])
+    signal_right = delete_in_arr(signal_left, [1, -1])
 
     return np.column_stack((signal_left, signal_right))
 
@@ -239,12 +246,12 @@ def save(split_signal):
         write(f"./Normalised Files/{File.filename}.{File.type}", File.rate, split_signal)
 
 
-def normalise(file):
+def normalize(file):
     try:
         signal_arr = open_audio(file)
         remove_backround_noise(signal_arr)
-        split_signal, split_signal_copy = split_audio_signal(signal_arr)
-        transients = find_transients(split_signal, find_transient_limit(split_signal[0])) 
+        split_signal, split_signal_copy = split_signal_arr(signal_arr)
+        transients = find_transients(split_signal, find_transient_limit(split_signal[0]))
         amplify(split_signal, split_signal_copy, find_amplitudes(split_signal, transients))
         check_for_cliping(split_signal)
         signal_arr = merge_split_signal(split_signal)
@@ -258,11 +265,11 @@ def main():
     try:
         os.makedirs("Normalised Files")
     except FileExistsError: pass
-    doneFiles = os.listdir("./Normalised Files")
+    done_files = os.listdir("./Normalised Files")
     for file in os.listdir("./"):
-        if file not in doneFiles:
+        if file not in done_files:
             if check_file(file) == True:
-                normalise(file)
+                normalize(file)
 
 
 if __name__ == "__main__":
