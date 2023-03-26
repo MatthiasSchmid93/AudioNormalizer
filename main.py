@@ -5,7 +5,6 @@ import numpy as np
 from pydub import AudioSegment
 from alive_progress import alive_bar
 from scipy.io.wavfile import write
-import re
 import os
 from mutagen.id3 import ID3, APIC
 
@@ -104,18 +103,16 @@ def find_transient_limit(signal):
     duration = len(signal) / File.rate / 60
     if duration < 0.03:
         return 1
-    number_of_transients = (6 / 8) * duration
+    number_of_transients = (6 / 10) * duration
     transient_limit = int(number_of_transients * 1.6 * (60 * duration))
     return transient_limit
 
 
 def find_transients(split_signal, transient_limit):
     transients = []
-    threshold = 16383
-    threshold_old = 0
+    threshold, threshold_old = 16383, 0
     step = 8192
-    reached_above = 0
-    reached_below = 0
+    reached_above, reached_below = 0, 0
     with alive_bar(len(split_signal), title="Searching transients") as bar:
         for signal in split_signal:
             while step > 0:
@@ -124,14 +121,12 @@ def find_transients(split_signal, transient_limit):
                     if reached_below:
                         step /= 2
                     threshold += step
-                    reached_above = 1
-                    reached_below = 0
+                    reached_above, reached_below = 1, 0
                 if found_transients < transient_limit:
                     if reached_above:
                         step /= 2
                     threshold -= step
-                    reached_below = 1
-                    reached_above = 0
+                    reached_below, reached_above = 1, 0
                 if int(threshold_old) == int(threshold):
                     transients.append(np.where(signal >= threshold)[0])
                     break
