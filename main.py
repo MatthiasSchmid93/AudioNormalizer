@@ -56,10 +56,10 @@ def remove_backround_noise(signal_arr):
 def split_signal_arr(signal_arr):
 
     def replace_under(arr, value):
-        arr[arr < value]
+        arr[arr < 0] = value
 
     def replace_above_equal(arr, value):
-        arr[arr >= value]
+        arr[arr >= 0] = value
 
     def negative_to_positive_arr(arr):
         return abs(arr)
@@ -68,11 +68,19 @@ def split_signal_arr(signal_arr):
 
     # Replace positve ints with 1 and vice versa
     # In negative arr, 0 is also replaced for later merging
-    # Turn negative ints to postive for simplicit
-    left_positive = replace_under(np.array(signal_left_org, dtype=np.int32), 1)
-    left_negative = negative_to_positive_arr(replace_above_equal(np.array(signal_left_org, dtype=np.int32), -1))
-    right_positive = replace_under(np.array(signal_right_org, dtype=np.int32), 1)
-    right_negative = negative_to_positive_arr(replace_above_equal(np.array(signal_right_org, dtype=np.int32), -1))
+    # Turn negative ints to postive for simpliciy
+    left_positive = np.array(signal_left_org, dtype=np.int32)
+    left_negative = np.array(signal_left_org, dtype=np.int32)
+    right_positive = np.array(signal_right_org, dtype=np.int32)
+    right_negative = np.array(signal_right_org, dtype=np.int32)
+    
+    replace_under(left_positive, 1)
+    replace_above_equal(left_negative, -1)
+    replace_under(right_positive, 1)
+    replace_above_equal(right_negative, -1)
+    
+    left_negative = negative_to_positive_arr(left_negative)
+    right_negative = negative_to_positive_arr(right_negative)
 
     split_signal = [
         left_positive,
@@ -203,7 +211,7 @@ def merge_split_signal(split_signal):
 
     def delete_in_arr(arr, values):
         for value in values:
-            arr = np.delete(arr, np.where(signal_left == value))
+            arr = np.delete(arr, np.where(arr == value))
         return arr
 
     def positive_to_negative_arr(arr):
