@@ -9,10 +9,199 @@ import os
 from mutagen.id3 import ID3, APIC
 
 
-class File:
-    rate = None
-    type = None
-    filename = None
+def remove_adjacent_by_difference(arrays: list, diff=1) -> None:
+    for arr_index in range(len(arrays)):
+        i = 0
+        while i < arrays[arr_index].size - 1:
+            if abs(arrays[arr_index][i] - arrays[arr_index][i+1]) == diff:
+                arrays[arr_index] = np.delete(arrays[arr_index], i)
+            else:
+                i += 1
+
+
+def replace_equal(array, equal: list, value: list) -> None:
+    for equal, value in zip(equal, value):
+        array[array == equal] = value
+
+
+def replace_negative(arrays: list, indices: list, value) -> None:
+    for i in indices:
+        arrays[i][arrays[i] < 0] = value
+        
+
+def replace_positive(arrays: list, indices: list, value) -> None:
+    for i in indices:
+        arrays[i][arrays[i] >= 0] = value
+        
+
+def invert_values(arrays: list, indices: list) -> None:
+    for i in indices:
+        arrays[i] = np.where(arrays[i] >= 0, np.negative(arrays[i]), np.abs(arrays[i]))
+
+
+def delete_values(arrays: list, values) -> None:
+    for arr in range(len(arrays)):
+        mask = np.in1d(arrays[arr], values)
+        arrays[arr] = arrays[arr][~mask]
+        
+        
+def combine_arrays(data_pair: list):
+    return np.column_stack((data_pair[0], data_pair[1]))
+
+
+def open_audio(file) -> dict:
+    name, ext = os.path.splitext(file)
+    if ext.lower() not in {'.mp3', '.wav'}:
+        return None
+    try:
+        if ext.lower() == '.mp3':
+            audio = AudioSegment.from_mp3(file)
+        elif ext.lower() == '.wav':
+            audio = AudioSegment.from_wav(file)
+        signal_arr = np.array(audio.get_array_of_samples(), dtype=np.int16).reshape(-1, 2)
+        return {"filename": f"{name}{ext}", "type": ext, "frame_rate": audio.frame_rate, "signal_arr": signal_arr}
+    except (FileNotFoundError, PermissionError, IsADirectoryError):
+        return None
+    
+    
+def split_signal_array(signal_arr) -> list:
+    signal_left_org, signal_right_org = np.split(signal_arr, 2, axis=1)
+    split_signals = [
+        np.array(signal_left_org, dtype=np.float32),
+        np.array(signal_left_org, dtype=np.float32),
+        np.array(signal_right_org, dtype=np.float32),
+        np.array(signal_right_org, dtype=np.float32),
+    ]
+    
+    return split_signals
+
+
+def find_transient_limit(signal_arr, frame_rate: int) -> int:
+    duration = len(signal_arr) / frame_rate / 60
+    if duration < 0.03:
+        return 1
+    number_of_transients = (6 / 10) * duration
+    
+    return int(number_of_transients * 1.6 * (60 * duration))
+
+
+def find_transients(split_signals, transient_limit) -> list:
+    transients_per_split_signal = []
+    
+    for split_signal in split_signals:
+        threshold = 16383
+        step = 8192
+        reached_above, reached_below = 0, 0
+        
+        while step > 0:
+            found_transients = np.extract(split_signal >= threshold, split_signal).size
+            if found_transients > transient_limit:
+                if reached_below:
+                    step /= 2
+                threshold += step
+                reached_above, reached_below = 1, 0
+            if found_transients < transient_limit:
+                if reached_above:
+                    step /= 2
+                threshold -= step
+                reached_below, reached_above = 1, 0
+            if step <= 2:
+                transients_per_split_signal.append(np.where(split_signal >= threshold)[0])
+                break
+            
+    return transients_per_split_signal
+
+
+def find_amplitudes(split_signals, transients_per_split_signal):
+    amplitudes_per_split_signal = [[], [], [], []]
+     
+    for split_signal_index in range(len(split_signals)):
+        split_signal = split_signals[split_signal_index]
+        transients = transients_per_split_signal[split_signal_index]
+        
+        for transient in transients:
+            start, end = None, None
+            for trans in range(transient, -1, -1):
+                if split_signal[trans] <= 1:
+                    start = trans
+                    break
+            for trans in range(transient, len(split_signal)):
+                if split_signal[trans] <= 1:
+                    end = trans
+                    break
+            if amplitudes_per_split_signal[split_signal_index]:
+                if amplitudes_per_split_signal[split_signal_index][-1][1] >= start:
+                    continue
+            amplitudes_per_split_signal[split_signal_index].append([start, end])
+
+    return amplitudes_per_split_signal
+
+
+def find_global_amplification_factors(split_signals: list, amplitudes: list) -> list:
+    global_amplification_factors = []
+    
+    for split_signal_index in range(len(split_signals)):
+        masked_split_signal = split_signals[split_signal_index].copy()
+        for start, end in amplitudes[split_signal_index]:
+            masked_split_signal[start : end] = 0
+        global_amplification_factors.append(np.float32(32767 / np.max(masked_split_signal)))
+        
+    return global_amplification_factors
+
+
+def amplify(split_signals: list, global_amplification_factors: list, amplitudes_per_split_signal: list) -> None:
+    START = 0
+    END = 1
+    
+    def _amplify(split_signal, start, end, factor):
+        split_signal[start:end][split_signal[start:end] > 2] *= factor
+        
+    for split_signal_index in range(len(split_signals)):
+        split_signal = split_signals[split_signal_index]
+        global_amplification_factor = global_amplification_factors[split_signal_index]
+        amplitudes = amplitudes_per_split_signal[split_signal_index]
+        FIRST_AMP = amplitudes[split_signal_index][START]
+        
+        _amplify(split_signal, START, FIRST_AMP, global_amplification_factor)
+        
+        for amplitude in range(len(amplitudes)):
+            START_AMP = amplitudes[amplitude][START]
+            END_AMP = amplitudes[amplitude][END]
+            LAST_AMP = amplitudes[len(amplitudes) - 1][END]
+            END_OF_AUDIO = len(split_signal)
+            try:
+                START_NEXT_AMP = amplitudes[amplitude + 1][START]
+            except IndexError:
+                pass
+            amplitude_area_values = split_signal[START_AMP:END_AMP]
+            normalised_amplitude_area = split_signal[START_AMP:END_AMP] * global_amplification_factor
+            
+            if normalised_amplitude_area.max() > 32767:
+                amplitude_amplification_factor = 32767 / amplitude_area_values.max()
+                _amplify(split_signal, START_AMP, END_AMP, amplitude_amplification_factor)
+            else:
+                _amplify(split_signal, START_AMP, END_AMP, global_amplification_factor)
+                
+            _amplify(split_signal, END_AMP, START_NEXT_AMP, global_amplification_factor)
+
+        _amplify(split_signal, LAST_AMP, END_OF_AUDIO, global_amplification_factor)
+
+
+def check_for_cliping(split_signals: list) -> None:
+    
+    for split_signal_index in range(len(split_signals)):
+        split_signals[split_signal_index][split_signals[split_signal_index] > 32767] = 32767
+        
+        
+def merge_split_signal(split_signal: list) -> list:
+
+    signal_left = np.array([split_signal[0], split_signal[1]], dtype=np.int16).T.flatten()
+    signal_right = np.array([split_signal[2], split_signal[3]], dtype=np.int16).T.flatten()
+
+    return [signal_left, signal_right]
+
+
+def write_tags(file: str) -> None:
     tags = {
         "Title": "TIT2",
         "BPM": "TBPM",
@@ -23,212 +212,7 @@ class File:
         "Track number": "TRCK",
         "Genre": "TCON",
     }
-
-    
-def check_file(file):
-    name, ext = os.path.splitext(file)
-    if ext.lower() not in {'.mp3', '.wav'}:
-        return False
-    try:
-        with open(file):
-            pass
-        File.filename = name
-        File.type = ext
-        return True
-    except (FileNotFoundError, PermissionError, IsADirectoryError):
-        return False
-
-
-def open_audio(file):
-    if File.type == ".mp3":
-        audio = AudioSegment.from_mp3(file)
-        File.rate = audio.frame_rate
-    elif File.type == ".wav":
-        audio = AudioSegment.from_wav(file)
-        File.rate = audio.frame_rate
-    return np.array(audio.get_array_of_samples(), dtype=np.int16).reshape(-1, 2)
-
-
-def remove_backround_noise(signal_arr):
-    signal_arr[signal_arr == 1] = 0
-    signal_arr[signal_arr == -1] = 0
-
-
-def split_signal_arr(signal_arr):
-
-    def replace_negative(arr, value):
-        arr[arr < 0] = value
-
-    def replace_positive_equal(arr, value):
-        arr[arr >= 0] = value
-
-    def negative_to_positive_arr(arr):
-        return abs(arr)
-
-    signal_left_org, signal_right_org = np.split(signal_arr, 2, axis=1)
-
-    # Replace positve ints with 1 and vice versa
-    # In negative arr, 0 is also replaced for later merging
-    # Turn negative ints to postive for simpliciy
-    left_positive = np.array(signal_left_org, dtype=np.int32)
-    left_negative = np.array(signal_left_org, dtype=np.int32)
-    right_positive = np.array(signal_right_org, dtype=np.int32)
-    right_negative = np.array(signal_right_org, dtype=np.int32)
-    
-    replace_negative(left_positive, 1)
-    replace_positive_equal(left_negative, -1)
-    replace_negative(right_positive, 1)
-    replace_positive_equal(right_negative, -1)
-    
-    left_negative = negative_to_positive_arr(left_negative)
-    right_negative = negative_to_positive_arr(right_negative)
-
-    split_signal = [
-        left_positive,
-        left_negative,
-        right_positive,
-        right_negative,
-    ]
-    split_signal_copy = [
-        np.array(left_positive, dtype=np.int32),
-        np.array(left_negative, dtype=np.int32),
-        np.array(right_positive, dtype=np.int32),
-        np.array(right_negative, dtype=np.int32),
-    ]
-
-    return split_signal, split_signal_copy
-
-
-def find_transient_limit(signal):
-    duration = len(signal) / File.rate / 60
-    if duration < 0.03:
-        return 1
-    number_of_transients = (6 / 10) * duration
-    transient_limit = int(number_of_transients * 1.6 * (60 * duration))
-    return transient_limit
-
-
-def find_transients(split_signal, transient_limit):
-    transients = []
-    threshold, threshold_old = 16383, 0
-    step = 8192
-    reached_above, reached_below = 0, 0
-    with alive_bar(len(split_signal), title="Searching transients") as bar:
-        for signal in split_signal:
-            while step > 0:
-                found_transients = np.extract(signal >= threshold, signal).size
-                if found_transients > transient_limit:
-                    if reached_below:
-                        step /= 2
-                    threshold += step
-                    reached_above, reached_below = 1, 0
-                if found_transients < transient_limit:
-                    if reached_above:
-                        step /= 2
-                    threshold -= step
-                    reached_below, reached_above = 1, 0
-                if int(threshold_old) == int(threshold):
-                    transients.append(np.where(signal >= threshold)[0])
-                    break
-                threshold_old = threshold
-            bar()
-    return transients
-
-
-def find_amplitudes(split_signal, transients):
-    amplitudes = [[], [], [], []]
-
-    def find_amplitude(split_signal, x, i, transients):
-        start, end = None, None
-        for j in range(transients[x][i], -1, -1):
-            if split_signal[x][j] <= 1:
-                start = j
-                break
-        for j in range(transients[x][i], len(split_signal[x])):
-            if split_signal[x][j] <= 1:
-                end = j
-                break
-        if start is not None and end is not None:
-            amplitudes[x].append([start, end])
-
-    for x in range(4):
-        for i in range(len(transients[x])):
-            if i > 1 and amplitudes[x]:
-                prev_end = amplitudes[x][-1][1]
-                if transients[x][i] <= prev_end:
-                    continue
-            find_amplitude(split_signal, x, i, transients)
-
-        if len(amplitudes[x]) > 1 and amplitudes[x][0][1] >= amplitudes[x][1][0]:
-            del amplitudes[x][0]
-    return amplitudes
-
-
-def amplify(split_signal, split_signal_copy, amplitudes):
-
-    def find_global_peak(split_signal_copy, amplitudes, x):
-        for i in range(len(amplitudes[x])):
-            split_signal_copy[x][amplitudes[x][i][0] : amplitudes[x][i][1]] = 0
-        return 32767 / split_signal_copy[x].max()
-
-    def _amplify(split_signal, start, end, factor):
-        split_signal[start:end][split_signal[start:end] > 2] = (
-            split_signal[start:end][split_signal[start:end] > 2] * factor
-        )
-    with alive_bar(4, title="Normalizing") as bar:
-        for x in range(4):
-            global_peak = find_global_peak(split_signal_copy, amplitudes, x)
-            first_amp = amplitudes[x][0][0]
-            _amplify(split_signal[x], 0, first_amp, global_peak)
-            for i in range(len(amplitudes[x])):
-                start_amp = amplitudes[x][i][0]
-                end_amp = amplitudes[x][i][1]
-                last_amp = amplitudes[x][len(amplitudes[x]) - 1][1]
-                end_audio = len(split_signal[x])
-                try:
-                    end_between = amplitudes[x][i + 1][0]
-                except IndexError:
-                    pass
-                peak_area_values = split_signal[x][start_amp:end_amp]
-                normalised_peak_area = split_signal[x][start_amp:end_amp] * global_peak
-                if normalised_peak_area.max() > 32767:
-                    local_peak = 32767 / peak_area_values.max()
-                    _amplify(split_signal[x], start_amp, end_amp, local_peak)
-                else:
-                    _amplify(split_signal[x], start_amp, end_amp, global_peak)
-                _amplify(split_signal[x], end_amp, end_between, global_peak)
-            bar()
-        # Insert normalised block from last peak until end
-        _amplify(split_signal[x], last_amp, end_audio, global_peak)
-
-
-def check_for_cliping(split_signal):
-    for i in range(4):
-        split_signal[i][split_signal[i] > 32767] = 32767
-
-
-def merge_split_signal(split_signal):
-
-    def delete_values(arr, values):
-        mask = np.in1d(arr, values)
-        return arr[~mask]
-
-    def negative_arr(arr):
-        return -arr
-
-    split_signal[1] = negative_arr(split_signal[1])
-    split_signal[3] = negative_arr(split_signal[3])
-
-    signal_left = np.array([split_signal[0], split_signal[1]], dtype=np.int16).T.flatten()
-    signal_right = np.array([split_signal[2], split_signal[3]], dtype=np.int16).T.flatten()
-
-    signal_left = delete_values(signal_left, [1, -1])
-    signal_right = delete_values(signal_right, [1, -1])
-
-    return np.column_stack((signal_left, signal_right))
-
-
-def write_tags(file):
+    print(file)
     tags_old = ID3(file)
     tags_new = ID3(f"./Normalised Files/{file}")
     try:
@@ -237,40 +221,51 @@ def write_tags(file):
         tags_new.add(APIC(encoding=3, mime="image/jpg", type=3, desc="Cover", data=pict))
     except:
         print("Album Cover not found")
-    for tag in File.tags:
+    for tag in tags:
         try:
-            tags_new[File.tags[tag]] = tags_old[File.tags[tag]]
+            tags_new[tags[tag]] = tags_old[tags[tag]]
         except:
             print(f"{tag} tag not found")
     tags_new.save(f"./Normalised Files/{file}", v2_version=3)
-
-
-def save(split_signal):
-    if File.type == ".mp3":
-        song = AudioSegment(split_signal.tobytes(), frame_rate=File.rate, sample_width=2, channels=2,)
-        song.export(f"./Normalised Files/{File.filename}{File.type}", format="mp3", bitrate="320k",)
-    elif File.type == ".wav":
-        write(f"./Normalised Files/{File.filename}{File.type}", File.rate, split_signal)
-
-
-def normalize(file):
-    try:
-        signal_arr = open_audio(file)
-        remove_backround_noise(signal_arr)
-        split_signal, split_signal_copy = split_signal_arr(signal_arr)
-        transients = find_transients(split_signal, find_transient_limit(split_signal[0]))
-        if len(transients[0]) == len(split_signal[0]):
-            print("\033[91m SIGNAL TO LOW \033[0m")
-            return
-        amplify(split_signal, split_signal_copy, find_amplitudes(split_signal, transients))
-        check_for_cliping(split_signal)
-        signal_arr = merge_split_signal(split_signal)
-        save(signal_arr)
-        write_tags(f"{File.filename}{File.type}")
+    
+    
+def save(audio_signal, file_name: str, file_type: str, frame_rate: int) -> None:
+    if file_type == ".mp3":
+        song = AudioSegment(audio_signal.tobytes(), frame_rate=frame_rate, sample_width=2, channels=2,)
+        song.export(f"./Normalised Files/{file_name}", format="mp3", bitrate="320k",)
+    elif file_type == ".wav":
+        write(f"./Normalised Files/{file_name}", frame_rate, audio_signal)
+        
+        
+def normalize(file: str) -> None:
+    SIGNAL_LEFT_POSITIVE = 0
+    SIGNAL_LEFT_NEGATIVE = 1
+    SIGNAL_RIGHT_POSITIVE = 2
+    SIGNAL_RIGHT_NEGATIVE = 3
+    if audio_file := open_audio(file):
+        replace_equal(audio_file['signal_arr'], [1, -1], [0, 0])
+        split_signal_arrays = split_signal_array(audio_file['signal_arr'])
+        replace_negative(split_signal_arrays, [SIGNAL_LEFT_POSITIVE, SIGNAL_RIGHT_POSITIVE], 1)
+        replace_positive(split_signal_arrays, [SIGNAL_LEFT_NEGATIVE, SIGNAL_RIGHT_NEGATIVE], -1)
+        invert_values(split_signal_arrays, [SIGNAL_LEFT_NEGATIVE, SIGNAL_RIGHT_NEGATIVE])
+        transient_limit = find_transient_limit(audio_file['signal_arr'], audio_file['frame_rate'])
+        transients_per_split_signal = find_transients(split_signal_arrays, transient_limit)
+        remove_adjacent_by_difference(transients_per_split_signal)
+        amplitudes_per_split_signal = find_amplitudes(split_signal_arrays, transients_per_split_signal)
+        global_amplification_factors = find_global_amplification_factors(split_signal_arrays, amplitudes_per_split_signal)
+        amplify(split_signal_arrays, global_amplification_factors, amplitudes_per_split_signal)
+        check_for_cliping(split_signal_arrays)
+        invert_values(split_signal_arrays, [SIGNAL_LEFT_NEGATIVE, SIGNAL_RIGHT_NEGATIVE])
+        signals_left_right = merge_split_signal(split_signal_arrays)
+        delete_values(signals_left_right, [1, -1])
+        audio_signal = combine_arrays(signals_left_right)
+        save(audio_signal, audio_file['filename'], audio_file['type'], audio_file['frame_rate'])
+        write_tags(audio_file['filename'])
         print("\033[92m SUCCESS \033[0m")
-    except: print("\033[91m FAILED \033[0m")
-
-
+    else:
+        pass
+        
+        
 def main():
     try:
         os.makedirs("Normalised Files")
@@ -278,9 +273,7 @@ def main():
     done_files = os.listdir("./Normalised Files")
     for file in os.listdir("./"):
         if file not in done_files:
-            if check_file(file) == True:
-                print(file)
-                normalize(file)
+            normalize(file)
 
 
 if __name__ == "__main__":
