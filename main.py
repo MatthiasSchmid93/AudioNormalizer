@@ -1,18 +1,12 @@
 from mutagen.id3 import ID3, APIC
 import os
 from scipy.io.wavfile import write
-from alive_progress import alive_bar
 from pydub import AudioSegment
 import numpy as np
 import warnings
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
-
-SIGNAL_LEFT_POSITIVE = 0
-SIGNAL_LEFT_NEGATIVE = 1
-SIGNAL_RIGHT_POSITIVE = 2
-SIGNAL_RIGHT_NEGATIVE = 3
 EQUAL_VALUES = [1, -1]
 REPLACE_VALUES = [0, 0]
 DELETE_VALUES = [1, -1]
@@ -42,7 +36,7 @@ class ArrayModifiers:
             arrays[i] = np.where(arrays[i] >= 0, np.negative(
                 arrays[i]), np.abs(arrays[i]))
 
-    def delete_values(arrays: list, values) -> None:
+    def delete_values(arrays: list, values: list) -> None:
         for arr in range(len(arrays)):
             mask = np.in1d(arrays[arr], values)
             arrays[arr] = arrays[arr][~mask]
@@ -50,14 +44,16 @@ class ArrayModifiers:
     def combine_arrays(array_pair: list) -> np.ndarray:
         return np.column_stack((array_pair[0], array_pair[1]))
 
-    def split_array(array: np.ndarray) -> list:
-        split_array1, split_array2 = np.split(array, 2, axis=1)
-        split_arrays = [
-            np.array(split_array1, dtype=np.float32),
-            np.array(split_array1, dtype=np.float32),
-            np.array(split_array2, dtype=np.float32),
-            np.array(split_array2, dtype=np.float32),
-        ]
+    def split_audio_array(array: np.ndarray) -> list:
+        def create_split_arrays(signal):
+            return [np.array(signal, dtype=np.float32), np.array(signal, dtype=np.float32)]
+
+        if array.ndim == 1:  # MONO
+            split_arrays = create_split_arrays(array)
+        elif array.ndim == 2:  # STEREO
+            signal_left, signal_right = np.hsplit(array, 2)
+            split_arrays = create_split_arrays(signal_left) + create_split_arrays(signal_right)
+
         return split_arrays
 
     def merge_split_arrays(split_arrays: list) -> list:
@@ -82,13 +78,13 @@ class Normalizer:
         return np.where(signal_array >= threshold)[0]
 
     def find_amplitudes(signal_array: np.ndarray, transients: np.ndarray) -> list:
-        amplitudes = []
         indices_of_ones = np.where(signal_array == 1)[0]
-        for transient in transients:
-            before_index = np.searchsorted(indices_of_ones, transient, side='left') - 1
-            after_index = np.searchsorted(indices_of_ones, transient, side='right')
-            amplitudes.append([indices_of_ones[before_index], indices_of_ones[after_index]])
-        return amplitudes
+        all_indices = np.searchsorted(indices_of_ones, transients)
+        before_indices = all_indices - 1
+        after_indices = all_indices
+        amplitudes = np.column_stack((indices_of_ones[before_indices], indices_of_ones[after_indices]))
+        amplitudes = np.delete(amplitudes, 0, axis=0)
+        return amplitudes.tolist()
 
     def find_amplification_factor(signal_array: np.ndarray, amplitudes: list) -> list:
         masked_signal_array = signal_array.copy()
@@ -195,17 +191,14 @@ class File:
                 f"./Normalised Files/{audio_file_data['filename']}", audio_file_data["frame_rate"], signal_array)
 
 
-def split_array_and_modify(array: np.ndarray) -> list:
-    ArrayModifiers.replace_equals_with_values(
-        array, EQUAL_VALUES, REPLACE_VALUES)
-    arrays = ArrayModifiers.split_array(array)
-    ArrayModifiers.replace_negatives_with_value(
-        arrays, [SIGNAL_LEFT_POSITIVE, SIGNAL_RIGHT_POSITIVE], 1)
-    ArrayModifiers.replace_positives_with_value(
-        arrays, [SIGNAL_LEFT_NEGATIVE, SIGNAL_RIGHT_NEGATIVE], -1)
-    ArrayModifiers.invert_values(
-        arrays, [SIGNAL_LEFT_NEGATIVE, SIGNAL_RIGHT_NEGATIVE])
-    return arrays
+def split_array_and_modify(signal_array: np.ndarray) -> list:
+    ArrayModifiers.replace_equals_with_values(signal_array, EQUAL_VALUES, REPLACE_VALUES)
+    signal_arrays = ArrayModifiers.split_audio_array(signal_array)
+    for i in range(0, len(signal_arrays), 2):
+        ArrayModifiers.replace_negatives_with_value(signal_arrays, [i], 1)
+        ArrayModifiers.replace_positives_with_value(signal_arrays, [i + 1], -1)
+        ArrayModifiers.invert_values(signal_arrays, [i + 1])
+    return signal_arrays
 
 
 def normalize(signal_array: list, audio_file_data: dict) -> bool:
@@ -221,12 +214,13 @@ def normalize(signal_array: list, audio_file_data: dict) -> bool:
 
 
 def modify_and_merge_arrays(signal_arrays: list) -> np.ndarray:
-    ArrayModifiers.invert_values(
-        signal_arrays, [SIGNAL_LEFT_NEGATIVE, SIGNAL_RIGHT_NEGATIVE])
+    for i in range(0, len(signal_arrays), 2):
+        ArrayModifiers.invert_values(signal_arrays, [i + 1])
     signals_left_right = ArrayModifiers.merge_split_arrays(signal_arrays)
     ArrayModifiers.delete_values(signals_left_right, DELETE_VALUES)
-    signal_array = ArrayModifiers.combine_arrays(signals_left_right)
-    return signal_array
+    if len(signal_arrays) == 4: # STEREO
+        return ArrayModifiers.combine_arrays(signals_left_right)
+    return signals_left_right
 
 
 def main():
