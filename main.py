@@ -53,7 +53,6 @@ class ArrayModifiers:
         elif array.ndim == 2:  # STEREO
             signal_left, signal_right = np.hsplit(array, 2)
             split_arrays = create_split_arrays(signal_left) + create_split_arrays(signal_right)
-
         return split_arrays
 
     def merge_split_arrays(split_arrays: list) -> list:
