@@ -5,16 +5,14 @@ from pydub import AudioSegment
 import numpy as np
 import warnings
 
+
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
-EQUAL_VALUES = [1, -1]
-REPLACE_VALUES = [0, 0]
-DELETE_VALUES = [1, -1]
+
 MAX_VOLUME = 32767
 
 
 class ArrayModifiers:
-
     def remove_adjacent_by_difference(array: np.ndarray, diff=1) -> np.ndarray:
         diff_array = np.abs(np.diff(array)) == diff
         return np.concatenate(([array[0]], array[1:][~diff_array]))
@@ -64,7 +62,6 @@ class ArrayModifiers:
     
 
 class Normalizer:
-
     def find_transient_threshold(signal_array: np.ndarray, frame_rate: int) -> list:
         blocks_max = []
         for i in range(0, signal_array.size, frame_rate):
@@ -81,7 +78,9 @@ class Normalizer:
         all_indices = np.searchsorted(indices_of_ones, transients)
         before_indices = all_indices - 1
         after_indices = all_indices
-        amplitudes = np.column_stack((indices_of_ones[before_indices], indices_of_ones[after_indices]))
+        try:
+            amplitudes = np.column_stack((indices_of_ones[before_indices], indices_of_ones[after_indices]))
+        except IndexError: return None
         amplitudes = np.delete(amplitudes, 0, axis=0)
         return amplitudes.tolist()
 
@@ -127,7 +126,6 @@ class Normalizer:
 
 
 class File:
-
     def open_audio(file: str) -> dict:
         name, ext = os.path.splitext(file)
         if ext.lower() not in {'.mp3', '.wav'}:
@@ -145,7 +143,7 @@ class File:
                 "frame_rate": audio.frame_rate,
                 "signal_array": signal_array}
             return file_data
-        except (FileNotFoundError, PermissionError, IsADirectoryError):
+        except (FileNotFoundError, PermissionError, IsADirectoryError, ValueError):
             return None
 
     def write_tags(file: str) -> None:
@@ -176,8 +174,10 @@ class File:
                 tags_new[tags[tag]] = tags_old[tags[tag]]
             except:
                 print(f"{tag} tag not found")
-
-        tags_new.save(f"./Normalised Files/{file}", v2_version=3)
+        try:
+            tags_new.save(f"./Normalised Files/{file}", v2_version=3)
+        except:
+            print("No tags found")
 
     def save(signal_array: np.ndarray, audio_file_data: dict) -> None:
         if audio_file_data["type"] == ".mp3":
@@ -191,6 +191,8 @@ class File:
 
 
 def split_array_and_modify(signal_array: np.ndarray) -> list:
+    EQUAL_VALUES = [1, -1]
+    REPLACE_VALUES = [0, 0]
     ArrayModifiers.replace_equals_with_values(signal_array, EQUAL_VALUES, REPLACE_VALUES)
     signal_arrays = ArrayModifiers.split_audio_array(signal_array)
     for i in range(0, len(signal_arrays), 2):
@@ -204,15 +206,17 @@ def normalize(signal_array: list, audio_file_data: dict) -> bool:
     threshold = Normalizer.find_transient_threshold(signal_array, audio_file_data["frame_rate"])
     transients = Normalizer.find_transients(signal_array, threshold)
     transients = ArrayModifiers.remove_adjacent_by_difference(transients)
-    amplitudes = Normalizer.find_amplitudes(signal_array, transients)
-    amplification_factor = Normalizer.find_amplification_factor(
-        signal_array, amplitudes)
-    Normalizer.amplify(signal_array, amplification_factor, amplitudes)
-    Normalizer.check_for_cliping(signal_array)
-    return 1
+    if amplitudes := Normalizer.find_amplitudes(signal_array, transients):
+        amplification_factor = Normalizer.find_amplification_factor(
+            signal_array, amplitudes)
+        Normalizer.amplify(signal_array, amplification_factor, amplitudes)
+        Normalizer.check_for_cliping(signal_array)
+        return 1
+    else: return 0
 
 
 def modify_and_merge_arrays(signal_arrays: list) -> np.ndarray:
+    DELETE_VALUES = [1, -1]
     for i in range(0, len(signal_arrays), 2):
         ArrayModifiers.invert_values(signal_arrays, [i + 1])
     signals_left_right = ArrayModifiers.merge_split_arrays(signal_arrays)
@@ -222,11 +226,10 @@ def modify_and_merge_arrays(signal_arrays: list) -> np.ndarray:
     return signals_left_right
 
 
-def main():
+def main() -> None:
     try:
         os.makedirs("Normalised Files")
-    except FileExistsError:
-        pass
+    except FileExistsError: pass
     done_files = os.listdir("./Normalised Files")
     for file in os.listdir("./"):
         if file not in done_files:
