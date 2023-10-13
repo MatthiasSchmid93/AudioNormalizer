@@ -108,18 +108,17 @@ def main_window(resolution: int) -> sg.Window:
         ],
     ]
     return sg.Window(
-        "AUDIO NORMALIZER",
+        "Audio Normalizer",
         layout,
         no_titlebar=False,
         finalize=True,
-        titlebar_icon="./bpm.png",
+        titlebar_icon="./nor.png",
         size=(win_lay.main_win_win[resolution][0], win_lay.main_win_win[resolution][1]),
         titlebar_text_color="#ffffff",
         use_custom_titlebar=True,
         titlebar_background_color="#000000",
         titlebar_font=("Arial", 12),
         grab_anywhere=True,
-        icon="./bpm.ico",
     )
 
 
