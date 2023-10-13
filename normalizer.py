@@ -396,6 +396,11 @@ def undo_prepare_signal(signal_arrays: list) -> np.ndarray:
 def normalize_folder(user_folder) -> None:
     progress.running = True
     done_files = File.check_folder(user_folder)
+    try:
+        os.listdir(f"{user_folder}")
+    except FileNotFoundError:
+        progress.reset()
+        return 1
     for file in os.listdir(f"{user_folder}"):
         if progress.terminate:
             progress.reset()
