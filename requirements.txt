@@ -1,0 +1,8 @@
+mutagen==1.46.0
+numpy==1.21.5
+pydub==0.25.1
+PyQt5==5.12.3
+PySimpleGUI==4.60.5
+scipy==1.9.1
+jsonschema
+daal
