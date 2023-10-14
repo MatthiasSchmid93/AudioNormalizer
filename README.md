@@ -1,6 +1,4 @@
 # ![plot](./nor.png) AudioNormalizer
-#### Video Demo:  <URL HERE>
-#### Description:
 <p align="center">
  <img src="./UI.png">
 </p>
