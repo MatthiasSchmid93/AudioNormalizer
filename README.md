@@ -1,4 +1,4 @@
-# ![plot](./nor.png) Audio Normalizer
+# ![plot](./nor.png) AudioNormalizer
 #### Video Demo:  <URL HERE>
 #### Description:
 <p align="center">
