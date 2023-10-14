@@ -95,10 +95,12 @@ class ArrayModifiers:
             )
 
     @staticmethod
-    def delete_values(arrays: list, values: list) -> None:
+    def delete_values(arrays: list, values: list) -> list:
+        new_arrays = []
         for arr in arrays:
             mask = np.in1d(arr, values)
-            arr = arr[~mask]
+            new_arrays.append(arr[~mask])
+        return new_arrays
 
     @staticmethod
     def combine_arrays(array_pair: list) -> np.ndarray:
@@ -137,10 +139,12 @@ class ArrayModifiers:
         signal_left = np.array(
             [split_arrays[0], split_arrays[1]], dtype=np.int16
         ).T.flatten()
-        signal_right = np.array(
-            [split_arrays[2], split_arrays[3]], dtype=np.int16
-        ).T.flatten()
-        return [signal_left, signal_right]
+        if len(split_arrays) == 4: # STEREO
+            signal_right = np.array(
+                [split_arrays[2], split_arrays[3]], dtype=np.int16
+            ).T.flatten()
+            return [signal_left, signal_right]
+        return [signal_left] # NONO
 
 
 class Normalizer:
@@ -253,7 +257,11 @@ class File:
                 audio = AudioSegment.from_wav(f"{user_folder}/{file}")
             signal_array = np.array(
                 audio.get_array_of_samples(), dtype=np.int16
-            ).reshape(-1, 2)
+            )
+            if signal_array.ndim == 1:  # MONO
+                signal_array.reshape(-1, 1)
+            elif signal_array.ndim == 2:  # STEREO
+                signal_array.reshape(-1, 2)
             file_data = {
                 "filename": f"{name}{ext}",
                 "type": ext,
@@ -369,6 +377,8 @@ def normalize_signal(signal_array: list, audio_file_data: dict) -> bool:
         amplification_factor = Normalizer.find_amplification_factor(
             signal_array, amplitudes
         )
+        if amplification_factor == 1.0:
+            return 1
         try:
             Normalizer.amplify(signal_array, amplification_factor, amplitudes)
         except:
@@ -387,10 +397,10 @@ def undo_prepare_signal(signal_arrays: list) -> np.ndarray:
     for i in range(0, len(signal_arrays), 2):
         ArrayModifiers.invert_values(signal_arrays, [i + 1])
     signals_left_right = ArrayModifiers.merge_split_arrays(signal_arrays)
-    ArrayModifiers.delete_values(signals_left_right, DELETE_VALUES)
+    signals_left_right = ArrayModifiers.delete_values(signals_left_right, DELETE_VALUES)
     if len(signal_arrays) == 4:  # STEREO
         return ArrayModifiers.combine_arrays(signals_left_right)
-    return signals_left_right
+    return signals_left_right[0] # MONO
 
 
 def normalize_folder(user_folder) -> None:
@@ -413,6 +423,7 @@ def normalize_folder(user_folder) -> None:
                     if not normalize_signal(signal_array, audio_file_data):
                         continue
                 signal_array = undo_prepare_signal(signal_arrays)
+                print(signal_array)
                 File.save(signal_array, audio_file_data, user_folder)
                 File.write_tags(file, user_folder)
         progress.bar = 0
