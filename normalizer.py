@@ -22,9 +22,9 @@ All the ID3 tags, including the album cover, are also maintained in the new norm
 As a result, the user gets an audiofile normalized to 0 dB without losing the dynamic range or the overall audio quality.
 """
 
-from mutagen.id3 import ID3, APIC
+from mutagen.id3 import ID3, APIC, TIT2, TBPM, TKEY, TPE1, TPUB, TSSE, TRCK, TCON , APIC
+from mutagen.aiff import AIFF
 import os
-from scipy.io.wavfile import write
 from pydub import AudioSegment
 import numpy as np
 import warnings
@@ -265,6 +265,7 @@ class File:
     @update_bar
     def open_audio(file: str, user_folder: str) -> dict:
         name, ext = os.path.splitext(file)
+        name = name.replace("â€“", "&")
         
         if ext.lower() not in {".mp3", ".wav"}:
             return None
@@ -302,50 +303,49 @@ class File:
     @staticmethod
     @update_bar
     def write_tags(file: str, user_folder: str) -> None:
-        tags = {
-            "Title": "TIT2",
-            "BPM": "TBPM",
-            "Key": "TKEY",
-            "Artist": "TPE1",
-            "Label": "TPUB",
-            "Encoder settings": "TSSE",
-            "Track number": "TRCK",
-            "Genre": "TCON",
+        file, ext = os.path.splitext(file)
+        tags_old = ID3(f"{user_folder}/{file}{ext}")
+        file = file.replace("â€“", "&")
+        tags = AIFF()
+        tag_map = {
+            "TIT2": TIT2,
+            "TBPM": TBPM,
+            "TKEY": TKEY,
+            "TPE1": TPE1,
+            "TPUB": TPUB,
+            "TSSE": TSSE,
+            "TRCK": TRCK,
+            "TCON": TCON,
         }
         
-        try:
-            tags_old = ID3(f"{user_folder}/{file}")
-            tags_new = ID3(f"{user_folder}/Normalized Files/{file}.wav")
-        except:
-            print("No ID3 Tags found")
-            
-        try:
-            pict = tags_old.getall("APIC")[0].data
-            tags_new.add(
-                APIC(encoding=3, mime="image/jpg", type=3, desc="Cover", data=pict)
-            )
-        except:
-            print("Album Cover not found")
-
-        for tag in tags:
+        for tag, TagClass in tag_map.items():
             try:
-                tags_new[tags[tag]] = tags_old[tags[tag]]
+                tag_text = str(tags_old[tag]).replace("â€“", "&")
+                tags[tag] = TagClass(encoding=3, text=f"{tag_text}")
             except:
-                print(f"{tag} tag not found")
+                print(f"{tag} not found")
                 
         try:
-            tags_new.save(f"{user_folder}/Normalized Files/{file}", v2_version=3)
-        except:
-            print("No tags found")
+            pict = tags_old.getall("APIC")[0].data
+            tags["APIC"] = APIC(encoding=3, mime="image/jpg", type=3, desc="Cover", data=pict)
+        except IndexError:
+            print("Album Cover not found")
+        
+        tags.save(f"{user_folder}/Normalized Files/{file}.aiff", v2_version=3)
+
 
     @staticmethod
     @update_bar
-    def save(signal_array: np.ndarray, audio_file_data: dict, user_folder: str) -> None:
-        write(
-            f"{user_folder}/Normalized Files/{audio_file_data['filename']}.wav",
-            audio_file_data["frame_rate"],
-            signal_array,
+    def save(signal_array: np.ndarray, audio_file_data: dict, user_folder: str) -> None: 
+        new_audio = AudioSegment(
+        signal_array.tobytes(),
+        frame_rate=audio_file_data["frame_rate"],
+        sample_width=progress.channels,
+        channels=progress.channels
         )
+
+        # Export the audio to an AIFF file
+        new_audio.export(f"{user_folder}/Normalized Files/{audio_file_data['filename']}.aiff", format="aiff")
 
     @staticmethod
     def count_availible_files(user_folder: str) -> str:
@@ -468,7 +468,7 @@ def normalize_folder(user_folder) -> None:
                     
                 signal_array = undo_prepare_signal(signal_arrays)
                 File.save(signal_array, audio_file_data, user_folder)
-                File.write_tags(file, user_folder)
+                File.write_tags(f"{file}{ext}", user_folder)
                 
         progress.bar = 0
         
@@ -477,4 +477,4 @@ def normalize_folder(user_folder) -> None:
 
 
 if __name__ == "__main__":
-    normalize_folder("./")
+    normalize_folder("C:/Users/Schmi/Documents/Python Scripts/AudioNormalizer")
