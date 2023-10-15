@@ -97,9 +97,11 @@ class ArrayModifiers:
     @staticmethod
     def delete_values(arrays: list, values: list) -> list:
         new_arrays = []
+        
         for arr in arrays:
             mask = np.in1d(arr, values)
             new_arrays.append(arr[~mask])
+            
         return new_arrays
 
     @staticmethod
@@ -124,11 +126,13 @@ class ArrayModifiers:
 
         if array.ndim == 1:  # MONO
             split_arrays = create_split_arrays(array)
+            
         elif array.ndim == 2:  # STEREO
             signal_left, signal_right = np.hsplit(array, 2)
             split_arrays = create_split_arrays(signal_left) + create_split_arrays(
                 signal_right
             )
+            
         return split_arrays
 
     @staticmethod
@@ -139,11 +143,13 @@ class ArrayModifiers:
         signal_left = np.array(
             [split_arrays[0], split_arrays[1]], dtype=np.int16
         ).T.flatten()
+        
         if len(split_arrays) == 4: # STEREO
             signal_right = np.array(
                 [split_arrays[2], split_arrays[3]], dtype=np.int16
             ).T.flatten()
             return [signal_left, signal_right]
+        
         return [signal_left] # NONO
 
 
@@ -156,6 +162,7 @@ class Normalizer:
         Calculate a transient threshold based on the maximum values in equal-sized frames of a signal array.
         """
         blocks_max = []
+        
         for i in range(0, signal_array.size, frame_rate):
             block = signal_array[i : i + frame_rate]
             blocks_max.append(int(block.max()))
@@ -178,12 +185,14 @@ class Normalizer:
         all_indices = np.searchsorted(indices_of_ones, transients)
         before_indices = all_indices - 1
         after_indices = all_indices
+        
         try:
             amplitudes = np.column_stack(
                 (indices_of_ones[before_indices], indices_of_ones[after_indices])
             )
         except IndexError:
             return None
+        
         amplitudes = np.delete(amplitudes, 0, axis=0)
         return amplitudes.tolist()
 
@@ -200,8 +209,10 @@ class Normalizer:
         amplification_factor = np.float32(
             Normalizer.MAX_VOLUME / np.max(masked_signal_array)
         )
+        
         if amplification_factor < 1:
             amplification_factor = 1.0
+            
         return amplification_factor
 
     @staticmethod
@@ -224,11 +235,14 @@ class Normalizer:
 
         for i, (start, end) in enumerate(amplitudes):
             segment = signal_array[start:end] * amplification_factor
+            
             if segment.max() > Normalizer.MAX_VOLUME:
                 factor = Normalizer.MAX_VOLUME / (segment.max() / amplification_factor)
             else:
                 factor = amplification_factor
+                
             amplify_segment(start, end, factor)
+            
             if i + 1 < len(amplitudes):
                 next_start = amplitudes[i + 1][0]
                 amplify_segment(end, next_start, amplification_factor)
@@ -248,26 +262,34 @@ class File:
     @update_bar
     def open_audio(file: str, user_folder: str) -> dict:
         name, ext = os.path.splitext(file)
+        
         if ext.lower() not in {".mp3", ".wav"}:
             return None
+        
         try:
             if ext.lower() == ".mp3":
                 audio = AudioSegment.from_mp3(f"{user_folder}/{file}")
+                
             elif ext.lower() == ".wav":
                 audio = AudioSegment.from_wav(f"{user_folder}/{file}")
+                
             signal_array = np.array(
                 audio.get_array_of_samples(), dtype=np.int16
             )
+            
             if signal_array.ndim == 1:  # MONO
                 signal_array.reshape(-1, 1)
+                
             elif signal_array.ndim == 2:  # STEREO
                 signal_array.reshape(-1, 2)
+                
             file_data = {
                 "filename": f"{name}{ext}",
                 "type": ext,
                 "frame_rate": audio.frame_rate,
                 "signal_array": signal_array,
             }
+            
             return file_data
         except (FileNotFoundError, PermissionError, IsADirectoryError, ValueError):
             return None
@@ -285,11 +307,13 @@ class File:
             "Track number": "TRCK",
             "Genre": "TCON",
         }
+        
         try:
             tags_old = ID3(f"{user_folder}/{file}")
             tags_new = ID3(f"{user_folder}/Normalized Files/{file}")
         except:
             print("No ID3 Tags found")
+            
         try:
             pict = tags_old.getall("APIC")[0].data
             tags_new.add(
@@ -303,6 +327,7 @@ class File:
                 tags_new[tags[tag]] = tags_old[tags[tag]]
             except:
                 print(f"{tag} tag not found")
+                
         try:
             tags_new.save(f"{user_folder}/Normalized Files/{file}", v2_version=3)
         except:
@@ -318,11 +343,13 @@ class File:
                 sample_width=2,
                 channels=2,
             )
+            
             audio.export(
                 f"{user_folder}/Normalized Files/{audio_file_data['filename']}",
                 format="mp3",
                 bitrate="320k",
             )
+            
         elif audio_file_data["type"] == ".wav":
             write(
                 f"{user_folder}/Normalized Files/{audio_file_data['filename']}",
@@ -333,10 +360,12 @@ class File:
     @staticmethod
     def count_availible_files(user_folder: str) -> str:
         count = 0
+        
         for file in os.listdir(f"{user_folder}/"):
             _, ext = os.path.splitext(file)
             if ext.lower() in {".mp3", ".wav"}:
                 count += 1
+                
         return f" {count}"
 
     @staticmethod
@@ -345,6 +374,7 @@ class File:
             os.makedirs(f"{user_folder}/Normalized Files")
         except FileExistsError:
             pass
+        
         return os.listdir(f"{user_folder}/Normalized Files")
 
 
@@ -355,14 +385,17 @@ def prepare_signal(signal_array: np.ndarray) -> list:
     """
     EQUAL_VALUES = [1, -1]
     REPLACE_VALUES = [0, 0]
+    
     ArrayModifiers.replace_equals_with_values(
         signal_array, EQUAL_VALUES, REPLACE_VALUES
     )
     signal_arrays = ArrayModifiers.split_audio_array(signal_array)
+    
     for i in range(0, len(signal_arrays), 2):
         ArrayModifiers.replace_negatives_with_value(signal_arrays, [i], 1)
         ArrayModifiers.replace_positives_with_value(signal_arrays, [i + 1], -1)
         ArrayModifiers.invert_values(signal_arrays, [i + 1])
+        
     return signal_arrays
 
 
@@ -373,18 +406,23 @@ def normalize_signal(signal_array: list, audio_file_data: dict) -> bool:
     )
     transients = Normalizer.find_transients(signal_array, threshold)
     transients = ArrayModifiers.remove_adjacent_by_difference(transients)
+    
     if amplitudes := Normalizer.find_amplitudes(signal_array, transients):
         amplification_factor = Normalizer.find_amplification_factor(
             signal_array, amplitudes
         )
+        
         if amplification_factor == 1.0:
             return 1
+        
         try:
             Normalizer.amplify(signal_array, amplification_factor, amplitudes)
         except:
             return 0
+        
         Normalizer.check_for_clipping(signal_array)
         return 1
+    
     return 0
 
 
@@ -394,39 +432,49 @@ def undo_prepare_signal(signal_arrays: list) -> np.ndarray:
     Convert the prepared signal arrays back to the original structure
     """
     DELETE_VALUES = [1, -1]
+    
     for i in range(0, len(signal_arrays), 2):
         ArrayModifiers.invert_values(signal_arrays, [i + 1])
+        
     signals_left_right = ArrayModifiers.merge_split_arrays(signal_arrays)
     signals_left_right = ArrayModifiers.delete_values(signals_left_right, DELETE_VALUES)
+    
     if len(signal_arrays) == 4:  # STEREO
         return ArrayModifiers.combine_arrays(signals_left_right)
+    
     return signals_left_right[0] # MONO
 
 
 def normalize_folder(user_folder) -> None:
     progress.running = True
     done_files = File.check_folder(user_folder)
+    
     try:
         os.listdir(f"{user_folder}")
     except FileNotFoundError:
         progress.reset()
         return 1
+    
     for file in os.listdir(f"{user_folder}"):
         if progress.terminate:
             progress.reset()
             return 0
+        
         if file not in done_files:
             if audio_file_data := File.open_audio(file, user_folder):
                 progress.current_file = audio_file_data["filename"]
                 signal_arrays = prepare_signal(audio_file_data["signal_array"])
+                
                 for signal_array in signal_arrays:
                     if not normalize_signal(signal_array, audio_file_data):
                         continue
+                    
                 signal_array = undo_prepare_signal(signal_arrays)
-                print(signal_array)
                 File.save(signal_array, audio_file_data, user_folder)
                 File.write_tags(file, user_folder)
+                
         progress.bar = 0
+        
     progress.reset()
     return 0
 

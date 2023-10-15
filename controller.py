@@ -13,6 +13,7 @@ class ThreadingEvents:
         self.normalizing_thread = Thread(
             target=normalizer.normalize_folder, args=(user_folder,)
         )
+        
         self.normalizing_thread.start()
 
     def start_refresh_window(self) -> None:
@@ -22,12 +23,15 @@ class ThreadingEvents:
 
 def main():
     threading_events = ThreadingEvents()
+    
     while True:
         event, _ = _main_window.read()
+        
         if event == sg.WINDOW_CLOSED:
             normalizer.progress.terminate = True
             _main_window.close()
             return 0
+        
         if event == "normalize":
             if not normalizer.progress.running:
                 RefreshWindow.on_click_normalize()
@@ -36,6 +40,7 @@ def main():
             else:
                 normalizer.progress.terminate = True
                 RefreshWindow.on_click_normalize()
+                
         if event == "choose_folder":
             user_folder = RefreshWindow.on_click_choose_folder()
 

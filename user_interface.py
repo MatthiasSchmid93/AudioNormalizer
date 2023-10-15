@@ -130,20 +130,26 @@ class RefreshWindow:
     def popup_explorer() -> str:
         _main_window.Element("choose_folder").Update(disabled=True)
         _main_window.Element("normalize").Update(disabled=True)
+        
         user_folder = sg.popup_get_folder("Choose a folder", no_window=True)
+        
         _main_window.Element("choose_folder").Update(disabled=False)
         _main_window.Element("normalize").Update(disabled=False)
+        
         return user_folder
 
     @staticmethod
     def on_click_choose_folder():
         _main_window.Element("completed").Update("", text_color="green")
+        
         user_folder = RefreshWindow.popup_explorer()
+        
         _main_window.Element("number_files").Update(
             normalizer.File.count_availible_files(user_folder)
         )
         _main_window.Element("info").Update(user_folder)
         _main_window.Element("normalize").Update(disabled=False)
+        
         return user_folder
 
     @staticmethod
@@ -155,6 +161,7 @@ class RefreshWindow:
                 ("NORMALIZING..."),
                 button_color=(("white on blue")),
             )
+            
         else:
             _main_window.Element("choose_folder").Update(disabled=True)
             _main_window.Element("normalize").Update(
@@ -169,6 +176,7 @@ class RefreshWindow:
                 normalizer.progress.bar, bar_color=("Blue", "White")
             )
             _main_window.Element("info").Update(normalizer.progress.current_file)
+            
         _main_window.Element("info").Update("")
         _main_window.Element("completed").Update("DONE", text_color="green")
         _main_window.Element("normalize").Update(
@@ -176,4 +184,5 @@ class RefreshWindow:
         )
         _main_window.Element("-PROGRESS_BAR-").Update(bar_color=("Blue", "Blue"))
         _main_window.Element("choose_folder").Update(disabled=False)
+        
         return 0
