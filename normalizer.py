@@ -304,7 +304,13 @@ class File:
     @update_bar
     def write_tags(file: str, user_folder: str) -> None:
         file, ext = os.path.splitext(file)
-        tags_old = ID3(f"{user_folder}/{file}{ext}")
+        
+        try:
+            tags_old = ID3(f"{user_folder}/{file}{ext}")
+        except:
+            print("No tags found")
+            return None
+            
         file = file.replace("â€“", "&")
         tags = AIFF()
         tag_map = {
