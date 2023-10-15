@@ -39,6 +39,7 @@ class Progress:
         self.terminate = False
         self.current_file = ""
         self.channels = None
+        self.sample_width = None
 
     def reset(self) -> None:
         self.bar = 0
@@ -278,6 +279,7 @@ class File:
                 audio = AudioSegment.from_wav(f"{user_folder}/{file}")
                 
             progress.channels = audio.channels
+            progress.sample_width = audio.sample_width
                 
             signal_array = np.array(
                 audio.get_array_of_samples(), dtype=np.int16
@@ -346,7 +348,7 @@ class File:
         new_audio = AudioSegment(
         signal_array.tobytes(),
         frame_rate=audio_file_data["frame_rate"],
-        sample_width=progress.channels,
+        sample_width=progress.sample_width,
         channels=progress.channels
         )
 
