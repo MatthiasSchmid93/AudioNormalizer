@@ -289,7 +289,7 @@ class File:
                 signal_array = signal_array.reshape(-1, 2)
                 
             file_data = {
-                "filename": f"{name}{ext}",
+                "filename": f"{name}",
                 "type": ext,
                 "frame_rate": audio.frame_rate,
                 "signal_array": signal_array,
@@ -315,7 +315,7 @@ class File:
         
         try:
             tags_old = ID3(f"{user_folder}/{file}")
-            tags_new = ID3(f"{user_folder}/Normalized Files/{file}")
+            tags_new = ID3(f"{user_folder}/Normalized Files/{file}.wav")
         except:
             print("No ID3 Tags found")
             
@@ -341,32 +341,11 @@ class File:
     @staticmethod
     @update_bar
     def save(signal_array: np.ndarray, audio_file_data: dict, user_folder: str) -> None:
-        if audio_file_data["type"] == ".mp3":
-            if progress.channels == 1: # MONO
-                channels = 1
-                
-            if progress.channels == 2: # STEREO
-                channels = 2
-            
-            audio = AudioSegment(
-                signal_array.tobytes(),
-                frame_rate=audio_file_data["frame_rate"],
-                sample_width=channels,
-                channels=channels,
-            )
-            
-            audio.export(
-                f"{user_folder}/Normalized Files/{audio_file_data['filename']}",
-                format="mp3",
-                bitrate="320k",
-            )
-            
-        elif audio_file_data["type"] == ".wav":
-            write(
-                f"{user_folder}/Normalized Files/{audio_file_data['filename']}",
-                audio_file_data["frame_rate"],
-                signal_array,
-            )
+        write(
+            f"{user_folder}/Normalized Files/{audio_file_data['filename']}.wav",
+            audio_file_data["frame_rate"],
+            signal_array,
+        )
 
     @staticmethod
     def count_availible_files(user_folder: str) -> str:
@@ -381,12 +360,17 @@ class File:
 
     @staticmethod
     def check_folder(user_folder: str) -> list[str]:
+        files = []
         try:
             os.makedirs(f"{user_folder}/Normalized Files")
         except FileExistsError:
             pass
         
-        return os.listdir(f"{user_folder}/Normalized Files")
+        for file in os.listdir(f"{user_folder}/Normalized Files"):
+            file, _ = os.path.splitext(file)
+            files.append(file)
+            
+        return files
 
 
 @update_bar
@@ -467,12 +451,14 @@ def normalize_folder(user_folder) -> None:
         return 1
     
     for file in os.listdir(f"{user_folder}"):
+        file, ext = os.path.splitext(file)
+        
         if progress.terminate:
             progress.reset()
             return None
         
         if file not in done_files:
-            if audio_file_data := File.open_audio(file, user_folder):
+            if audio_file_data := File.open_audio(f"{file}{ext}", user_folder):
                 progress.current_file = audio_file_data["filename"]
                 signal_arrays = prepare_signal(audio_file_data["signal_array"])
                 
