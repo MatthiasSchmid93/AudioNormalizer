@@ -22,9 +22,9 @@ All the ID3 tags, including the album cover, are also maintained in the new norm
 As a result, the user gets an audiofile normalized to 0 dB without losing the dynamic range or the overall audio quality.
 """
 
-from mutagen.id3 import ID3, APIC
+from mutagen.id3 import ID3, APIC, TIT2, TBPM, TKEY, TPE1, TPUB, TSSE, TRCK, TCON , APIC
+from mutagen.aiff import AIFF
 import os
-from scipy.io.wavfile import write
 from pydub import AudioSegment
 import numpy as np
 import warnings
@@ -38,7 +38,11 @@ class Progress:
         self.running = False
         self.terminate = False
         self.current_file = ""
+        
         self.channels = None
+        self.sample_width = None
+        self.data_types = {"1": np.int8, "2": np.int16, "4": np.int32}
+        self.data_type = None
 
     def reset(self) -> None:
         self.bar = 0
@@ -122,8 +126,8 @@ class ArrayModifiers:
 
         def create_split_arrays(signal):
             return [
-                np.array(signal, dtype=np.float32),
-                np.array(signal, dtype=np.float32),
+                np.array(signal, dtype=progress.data_type),
+                np.array(signal, dtype=progress.data_type),
             ]
 
         if progress.channels == 1:  # MONO
@@ -143,12 +147,12 @@ class ArrayModifiers:
         Merges previously split audio channels back into their original array structure.
         """
         signal_left = np.array(
-            [split_arrays[0], split_arrays[1]], dtype=np.int16
+            [split_arrays[0], split_arrays[1]], dtype=progress.data_type
         ).T.flatten()
         
         if progress.channels == 2: # STEREO
             signal_right = np.array(
-                [split_arrays[2], split_arrays[3]], dtype=np.int16
+                [split_arrays[2], split_arrays[3]], dtype=progress.data_type
             ).T.flatten()
             
             return [signal_left, signal_right]
@@ -265,6 +269,7 @@ class File:
     @update_bar
     def open_audio(file: str, user_folder: str) -> dict:
         name, ext = os.path.splitext(file)
+        name = name.replace("â€“", "&")
         
         if ext.lower() not in {".mp3", ".wav"}:
             return None
@@ -277,9 +282,11 @@ class File:
                 audio = AudioSegment.from_wav(f"{user_folder}/{file}")
                 
             progress.channels = audio.channels
+            progress.sample_width = audio.sample_width
+            progress.data_type = progress.data_types[str(progress.sample_width)]
                 
             signal_array = np.array(
-                audio.get_array_of_samples(), dtype=np.int16
+                audio.get_array_of_samples(), dtype=progress.data_type
             )
             
             if progress.channels == 1:  # MONO
@@ -289,7 +296,7 @@ class File:
                 signal_array = signal_array.reshape(-1, 2)
                 
             file_data = {
-                "filename": f"{name}{ext}",
+                "filename": f"{name}",
                 "type": ext,
                 "frame_rate": audio.frame_rate,
                 "signal_array": signal_array,
@@ -302,71 +309,55 @@ class File:
     @staticmethod
     @update_bar
     def write_tags(file: str, user_folder: str) -> None:
-        tags = {
-            "Title": "TIT2",
-            "BPM": "TBPM",
-            "Key": "TKEY",
-            "Artist": "TPE1",
-            "Label": "TPUB",
-            "Encoder settings": "TSSE",
-            "Track number": "TRCK",
-            "Genre": "TCON",
-        }
+        file, ext = os.path.splitext(file)
         
         try:
-            tags_old = ID3(f"{user_folder}/{file}")
-            tags_new = ID3(f"{user_folder}/Normalized Files/{file}")
-        except:
-            print("No ID3 Tags found")
-            
-        try:
-            pict = tags_old.getall("APIC")[0].data
-            tags_new.add(
-                APIC(encoding=3, mime="image/jpg", type=3, desc="Cover", data=pict)
-            )
-        except:
-            print("Album Cover not found")
-
-        for tag in tags:
-            try:
-                tags_new[tags[tag]] = tags_old[tags[tag]]
-            except:
-                print(f"{tag} tag not found")
-                
-        try:
-            tags_new.save(f"{user_folder}/Normalized Files/{file}", v2_version=3)
+            tags_old = ID3(f"{user_folder}/{file}{ext}")
         except:
             print("No tags found")
+            return None
+            
+        file = file.replace("â€“", "&")
+        tags = AIFF()
+        tag_map = {
+            "TIT2": TIT2,
+            "TBPM": TBPM,
+            "TKEY": TKEY,
+            "TPE1": TPE1,
+            "TPUB": TPUB,
+            "TSSE": TSSE,
+            "TRCK": TRCK,
+            "TCON": TCON,
+        }
+        
+        for tag, TagClass in tag_map.items():
+            try:
+                tag_text = str(tags_old[tag]).replace("â€“", "&")
+                tags[tag] = TagClass(encoding=3, text=f"{tag_text}")
+            except:
+                print(f"{tag} not found")
+                
+        try:
+            pict = tags_old.getall("APIC")[0].data
+            tags["APIC"] = APIC(encoding=3, mime="image/jpg", type=3, desc="Cover", data=pict)
+        except IndexError:
+            print("Album Cover not found")
+        
+        tags.save(f"{user_folder}/Normalized Files/{file}.aiff", v2_version=3)
+
 
     @staticmethod
     @update_bar
     def save(signal_array: np.ndarray, audio_file_data: dict, user_folder: str) -> None:
-        if audio_file_data["type"] == ".mp3":
-            if progress.channels == 1: # MONO
-                channels = 1
-                
-            if progress.channels == 2: # STEREO
-                channels = 2
-            
-            audio = AudioSegment(
-                signal_array.tobytes(),
-                frame_rate=audio_file_data["frame_rate"],
-                sample_width=channels,
-                channels=channels,
-            )
-            
-            audio.export(
-                f"{user_folder}/Normalized Files/{audio_file_data['filename']}",
-                format="mp3",
-                bitrate="320k",
-            )
-            
-        elif audio_file_data["type"] == ".wav":
-            write(
-                f"{user_folder}/Normalized Files/{audio_file_data['filename']}",
-                audio_file_data["frame_rate"],
-                signal_array,
-            )
+        new_audio = AudioSegment(
+        signal_array.tobytes(),
+        frame_rate=audio_file_data["frame_rate"],
+        sample_width=progress.sample_width,
+        channels=progress.channels
+        )
+
+        # Export the audio to an AIFF file
+        new_audio.export(f"{user_folder}/Normalized Files/{audio_file_data['filename']}.aiff", format="aiff")
 
     @staticmethod
     def count_availible_files(user_folder: str) -> str:
@@ -381,12 +372,17 @@ class File:
 
     @staticmethod
     def check_folder(user_folder: str) -> list[str]:
+        files = []
         try:
             os.makedirs(f"{user_folder}/Normalized Files")
         except FileExistsError:
             pass
         
-        return os.listdir(f"{user_folder}/Normalized Files")
+        for file in os.listdir(f"{user_folder}/Normalized Files"):
+            file, _ = os.path.splitext(file)
+            files.append(file)
+            
+        return files
 
 
 @update_bar
@@ -396,7 +392,7 @@ def prepare_signal(signal_array: np.ndarray) -> list:
     """
     EQUAL_VALUES = [1, -1]
     REPLACE_VALUES = [0, 0]
-    
+
     ArrayModifiers.replace_equals_with_values(
         signal_array, EQUAL_VALUES, REPLACE_VALUES
     )
@@ -453,7 +449,7 @@ def undo_prepare_signal(signal_arrays: list) -> np.ndarray:
     if progress.channels == 2:  # STEREO
         return ArrayModifiers.combine_arrays(signals_left_right)
     
-    return signals_left_right[0] # MONO
+    return signals_left_right[0].reshape(-1, 1) # MONO
 
 
 def normalize_folder(user_folder) -> None:
@@ -467,12 +463,14 @@ def normalize_folder(user_folder) -> None:
         return 1
     
     for file in os.listdir(f"{user_folder}"):
+        file, ext = os.path.splitext(file)
+        
         if progress.terminate:
             progress.reset()
             return None
         
         if file not in done_files:
-            if audio_file_data := File.open_audio(file, user_folder):
+            if audio_file_data := File.open_audio(f"{file}{ext}", user_folder):
                 progress.current_file = audio_file_data["filename"]
                 signal_arrays = prepare_signal(audio_file_data["signal_array"])
                 
@@ -481,8 +479,9 @@ def normalize_folder(user_folder) -> None:
                         continue
                     
                 signal_array = undo_prepare_signal(signal_arrays)
+
                 File.save(signal_array, audio_file_data, user_folder)
-                File.write_tags(file, user_folder)
+                File.write_tags(f"{file}{ext}", user_folder)
                 
         progress.bar = 0
         
