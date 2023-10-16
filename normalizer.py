@@ -38,8 +38,11 @@ class Progress:
         self.running = False
         self.terminate = False
         self.current_file = ""
+        
         self.channels = None
         self.sample_width = None
+        self.data_types = {"1": np.int8, "2": np.int16, "4": np.int32}
+        self.data_type = None
 
     def reset(self) -> None:
         self.bar = 0
@@ -123,8 +126,8 @@ class ArrayModifiers:
 
         def create_split_arrays(signal):
             return [
-                np.array(signal, dtype=np.float32),
-                np.array(signal, dtype=np.float32),
+                np.array(signal, dtype=progress.data_type),
+                np.array(signal, dtype=progress.data_type),
             ]
 
         if progress.channels == 1:  # MONO
@@ -144,12 +147,12 @@ class ArrayModifiers:
         Merges previously split audio channels back into their original array structure.
         """
         signal_left = np.array(
-            [split_arrays[0], split_arrays[1]], dtype=np.int16
+            [split_arrays[0], split_arrays[1]], dtype=progress.data_type
         ).T.flatten()
         
         if progress.channels == 2: # STEREO
             signal_right = np.array(
-                [split_arrays[2], split_arrays[3]], dtype=np.int16
+                [split_arrays[2], split_arrays[3]], dtype=progress.data_type
             ).T.flatten()
             
             return [signal_left, signal_right]
@@ -280,9 +283,10 @@ class File:
                 
             progress.channels = audio.channels
             progress.sample_width = audio.sample_width
+            progress.data_type = progress.data_types[str(progress.sample_width)]
                 
             signal_array = np.array(
-                audio.get_array_of_samples(), dtype=np.int16
+                audio.get_array_of_samples(), dtype=progress.data_type
             )
             
             if progress.channels == 1:  # MONO
@@ -344,7 +348,7 @@ class File:
 
     @staticmethod
     @update_bar
-    def save(signal_array: np.ndarray, audio_file_data: dict, user_folder: str) -> None: 
+    def save(signal_array: np.ndarray, audio_file_data: dict, user_folder: str) -> None:
         new_audio = AudioSegment(
         signal_array.tobytes(),
         frame_rate=audio_file_data["frame_rate"],
@@ -388,7 +392,7 @@ def prepare_signal(signal_array: np.ndarray) -> list:
     """
     EQUAL_VALUES = [1, -1]
     REPLACE_VALUES = [0, 0]
-    
+
     ArrayModifiers.replace_equals_with_values(
         signal_array, EQUAL_VALUES, REPLACE_VALUES
     )
@@ -445,7 +449,7 @@ def undo_prepare_signal(signal_arrays: list) -> np.ndarray:
     if progress.channels == 2:  # STEREO
         return ArrayModifiers.combine_arrays(signals_left_right)
     
-    return signals_left_right[0] # MONO
+    return signals_left_right[0].reshape(-1, 1) # MONO
 
 
 def normalize_folder(user_folder) -> None:
@@ -475,6 +479,7 @@ def normalize_folder(user_folder) -> None:
                         continue
                     
                 signal_array = undo_prepare_signal(signal_arrays)
+
                 File.save(signal_array, audio_file_data, user_folder)
                 File.write_tags(f"{file}{ext}", user_folder)
                 
@@ -485,4 +490,4 @@ def normalize_folder(user_folder) -> None:
 
 
 if __name__ == "__main__":
-    normalize_folder("C:/Users/Schmi/Documents/Python Scripts/AudioNormalizer")
+    normalize_folder("./")
