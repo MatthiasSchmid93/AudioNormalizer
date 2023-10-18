@@ -169,7 +169,7 @@ class Normalizer:
     @staticmethod
     def get_data_type(sample_width: int) -> np.dtype:
         """
-        Gets the data type for all the arrays based on the origin signal data type.
+        Gets the data type for all the arrays, based on the origin signal data type.
         Sample width 1 == 1 byte == 8 bit,...
         """
         data_types = {1: np.int8, 2: np.int16, 4: np.int32}
@@ -189,6 +189,7 @@ class Normalizer:
         """
         Calculate a transient threshold based on the maximum values in equal-sized frames of a signal array.
         """
+        # TODO Find better alorithm
         blocks_max = []
         
         for i in range(0, signal_array.size, frame_rate):
@@ -256,6 +257,7 @@ class Normalizer:
         LAST_AMP = amplitudes[-1][1]
 
         def amplify_segment(start: int, end: int, factor: float) -> None:
+            # Floating point amplification for the best result
             segment = signal_array[start:end].astype(float)
             above_threshold = segment > 3
             segment[above_threshold] *= factor
@@ -304,8 +306,8 @@ class Normalizer:
         # 1s are placeholders to know where positive or negative values have been
         # It keeps all the samples in original order
         # The original length is also maintained
-        # All arrays are processed unsighned. left negative for example contains only unsighned values. 
-        # Its converted back to negative after normalizing.
+        # All arrays are processed unsigned. Array "left negative" for example contains only unsigned values. 
+        # The negative arrays will be converted back to negative values after normalizing.
         for i in range(0, len(signal_arrays), 2):
             ArrayModifiers.replace_negatives_with_value(signal_arrays, [i], 1)
             ArrayModifiers.replace_positives_with_value(signal_arrays, [i + 1], -1)
@@ -343,13 +345,11 @@ class File:
             return None
         
         try:
-            
             if ext.lower() == ".mp3":
                 audio = AudioSegment.from_mp3(f"{folder}/{file}")
                 
             elif ext.lower() == ".wav":
                 audio = AudioSegment.from_wav(f"{folder}/{file}")
-    
         except (FileNotFoundError, PermissionError, IsADirectoryError, ValueError):
             return None
 
@@ -510,7 +510,6 @@ def normalize_folder(folder) -> None:
     for file in os.listdir(f"{folder}"):
         file, ext = os.path.splitext(file)
 
-        
         if progress.terminate:
             progress.reset()
             return None
@@ -525,4 +524,4 @@ def normalize_folder(folder) -> None:
 
 
 if __name__ == "__main__":
-    normalize_folder("C:/Users/Schmi/Documents/Python Scripts/AudioNormalizer")
+    normalize_folder("./")
