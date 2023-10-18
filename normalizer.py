@@ -525,4 +525,4 @@ def normalize_folder(folder) -> None:
 
 
 if __name__ == "__main__":
-    normalize_folder("C:/Users/Schmi/Documents/Python Scripts/AudioNormalizer")
+    normalize_folder("./")
