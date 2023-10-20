@@ -1,4 +1,4 @@
-import PySimpleGUI as sg
+from PySimpleGUI import WINDOW_CLOSED
 from threading import Thread
 import normalizer
 from user_interface import _main_window, RefreshWindow
@@ -9,7 +9,7 @@ def main():
     while True:
         event, _ = _main_window.read()
         
-        if event == sg.WINDOW_CLOSED:
+        if event == WINDOW_CLOSED:
             normalizer.progress.terminate = True
             _main_window.close()
             return 0
