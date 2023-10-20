@@ -1,6 +1,6 @@
-# ![plot](./assets/nor.png) AudioNormalizer
+# ![plot](AudioNormalizer/assets/nor.png) AudioNormalizer
 <p align="center">
- <img src="./assets/UI.png">
+ <img src="AudioNormalizer/assets/UI.png">
 </p>
 <br/>
 <p align="center">
