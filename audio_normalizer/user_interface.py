@@ -112,7 +112,7 @@ def main_window(resolution: int) -> sg.Window:
         layout,
         no_titlebar=False,
         finalize=True,
-        titlebar_icon="./nor.png",
+        titlebar_icon="./assets/nor.png",
         size=(win_lay.main_win_win[resolution][0], win_lay.main_win_win[resolution][1]),
         titlebar_text_color="#ffffff",
         use_custom_titlebar=True,
