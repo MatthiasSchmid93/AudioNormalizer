@@ -15,18 +15,18 @@ class ProgressHandler:
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(ProgressHandler, cls).__new__(cls)
-            cls._instance._format = "aiff"
+            cls._instance._format = "aiff" # Save as... 
             cls._instance.reset() 
         return cls._instance  
 
-    def reset(self):
+    def reset(self) -> None:
         self.bar = 0  # Represents the progress bar's current value.
         self.running = False  # A flag indicating whether the process is running.
         self.terminate = False  # A flag indicating whether the process should be stopped.
         self.current_file = ""  # The name of the file currently being processed.
 
     @staticmethod
-    def update_bar(func):
+    def update_bar(func) -> any:
         def wrapper(*args, **kwargs):
             result = func(*args, **kwargs)
             ProgressHandler()._instance.bar += 1

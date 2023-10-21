@@ -4,5 +4,4 @@ pydub==0.25.1
 PyQt5==5.12.3
 PySimpleGUI==4.60.5
 scipy==1.9.1
-jsonschema
-daal
+matplotlib==3.5.2
