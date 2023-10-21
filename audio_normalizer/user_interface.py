@@ -2,15 +2,16 @@ from PyQt5.QtWidgets import QApplication
 import PySimpleGUI as sg
 import sys
 from time import sleep
-import normalizer
+from . import normalizer
 from pathlib import Path
+import pkg_resources
 
 sg.theme("Black")
 sg.set_options(dpi_awareness=True)
 
 
 repo_root_dir = Path(__file__).resolve().parent.parent
-ICON = repo_root_dir / "assets" / "nor.png"
+ICON = pkg_resources.resource_filename('audio_normalizer', 'assets/nor.png')
 
 
 # switch object sizes from the ui for low resolution or high resolution screens
@@ -165,7 +166,7 @@ class RefreshWindow:
 
     @staticmethod
     def on_click_choose_folder() -> str:
-        _main_window.Element("completed").Update("", text_color="green")
+        _main_window.Element("completed").Update("")
         
         user_folder = RefreshWindow.popup_explorer()
         
@@ -180,7 +181,7 @@ class RefreshWindow:
     @staticmethod
     def on_click_normalize() -> None:
         if not normalizer.progress.terminate:
-            _main_window.Element("completed").Update("", text_color="green")
+            _main_window.Element("completed").Update("")
             _main_window.Element("choose_folder").Update(disabled=True)
             _main_window.Element("normalize").Update(
                 ("NORMALIZING..."),
@@ -213,7 +214,7 @@ class RefreshWindow:
             _main_window.Element("info").Update(normalizer.progress.current_file)
             
         _main_window.Element("info").Update("")
-        _main_window.Element("completed").Update("DONE", text_color="green")
+        _main_window.Element("completed").Update("DONE", text_color="blue")
         _main_window.Element("normalize").Update(
             ("NORMALIZE"), button_color=(("black on white")), disabled=False
         )

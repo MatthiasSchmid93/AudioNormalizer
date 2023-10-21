@@ -25,7 +25,7 @@ As a result, the user gets an audiofile normalized to 0 dB without losing the dy
 
 import os
 import numpy as np
-from utils import ProgressHandler, ArrayModifiers, File, Plot
+from .utils import ProgressHandler, ArrayModifiers, File, Plot
 
 
 class Normalizer:
@@ -271,14 +271,13 @@ def normalize_folder(folder) -> None:
         return 1
 
     for file in os.listdir(f"{folder}"):
-        file, ext = os.path.splitext(file)
 
         if progress.terminate:
             progress.reset()
             return None
         
         if file not in done_files:
-            normalize_file(f"{file}{ext}", folder, progress._format)
+            normalize_file(file, folder, progress._format)
                 
         progress.bar = 0
         

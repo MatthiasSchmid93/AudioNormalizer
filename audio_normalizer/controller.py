@@ -1,7 +1,7 @@
 from PySimpleGUI import WINDOW_CLOSED
 from threading import Thread
-from normalizer import progress, normalize_folder
-from user_interface import _main_window, RefreshWindow
+from .normalizer import progress, normalize_folder
+from .user_interface import _main_window, RefreshWindow
 
  
 def main():
