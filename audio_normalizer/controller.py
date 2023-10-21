@@ -1,26 +1,25 @@
 from PySimpleGUI import WINDOW_CLOSED
 from threading import Thread
-import normalizer
+from normalizer import progress, normalize_folder
 from user_interface import _main_window, RefreshWindow
 
-
+ 
 def main():
-    
     while True:
         event, _ = _main_window.read()
         
         if event == WINDOW_CLOSED:
-            normalizer.progress.terminate = True
+            progress.terminate = True
             _main_window.close()
             return 0
         
         if event == "normalize":
-            if not normalizer.progress.running:
+            if not progress.running:
                 RefreshWindow.on_click_normalize()
-                Thread(target=normalizer.normalize_folder, args=(user_folder,)).start()
+                Thread(target=normalize_folder, args=(user_folder,)).start()
                 Thread(target=RefreshWindow.normalizer_progress).start()
             else:
-                normalizer.progress.terminate = True
+                progress.terminate = True
                 RefreshWindow.on_click_normalize()
                 
         if event == "choose_folder":

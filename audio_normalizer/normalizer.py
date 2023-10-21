@@ -22,9 +22,10 @@ All the ID3 tags, including the album cover, are also maintained in the new norm
 As a result, the user gets an audiofile normalized to 0 dB without losing the dynamic range or the overall audio quality.
 """
 
+
 import os
 import numpy as np
-from utils import ProgressHandler, ArrayModifiers, File
+from utils import ProgressHandler, ArrayModifiers, File, Plot
 
 
 class Normalizer:
@@ -115,6 +116,7 @@ class Normalizer:
         """
         Amplify a signal array while considering designated amplitude regions and an amplification factor.
         """
+        AUDIO_START = 0
         AUDIO_END = len(signal_array)
         FIRST_AMP = amplitudes[0][0]
         LAST_AMP = amplitudes[-1][1]
@@ -127,7 +129,7 @@ class Normalizer:
             segment = np.round(segment)
             signal_array[start:end] = segment
 
-        amplify_segment(0, FIRST_AMP, amplification_factor)
+        amplify_segment(AUDIO_START, FIRST_AMP, amplification_factor)
 
         for i, (start, end) in enumerate(amplitudes):
             segment = signal_array[start:end] * amplification_factor
@@ -212,6 +214,7 @@ def normalize_signal(signal_array: any, channels: int, frame_rate: int, sample_w
         threshold = Normalizer.find_transient_threshold(
             signal_array, frame_rate
         )
+        Plot.plot_find_transient_threshold(signal_array, threshold)
         transients = Normalizer.find_transients(signal_array, threshold)
         
         # Removes transients that are directly next to each other. 

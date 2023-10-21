@@ -3,6 +3,7 @@ from mutagen.aiff import AIFF
 import os
 from pydub import AudioSegment
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 class ProgressHandler:
@@ -219,7 +220,6 @@ class File:
         
         tags.save(f"{folder}/Normalized Files/{file}.aiff", v2_version=3)
 
-
     @staticmethod
     @ProgressHandler.update_bar
     def save_as_aiff(signal_array: np.ndarray, file_data: dict, folder: str) -> None:
@@ -244,7 +244,6 @@ class File:
                 
         return count
 
-
     @staticmethod
     def check_folder(folder: str) -> list[str]:
         files = []
@@ -258,3 +257,32 @@ class File:
             files.append(file)
             
         return files
+    
+
+class Plot:
+    @staticmethod
+    def plot_find_transient_threshold(signal_array: np.ndarray, threshold: int) -> None:
+
+        x_values = np.arange(len(signal_array))
+
+        plt.figure()
+        plt.plot(x_values, signal_array.ravel())
+        plt.axhline(y=threshold, color='r', linestyle='-')
+        plt.title('Plot of the Array') 
+        plt.xlabel('Time') 
+        plt.ylabel('Value')
+        plt.grid(True)
+        plt.show()
+
+    @staticmethod
+    def plot_signal_array(signal_array: np.ndarray) -> None:
+
+        x_values = np.arange(len(signal_array))
+
+        plt.figure()
+        plt.plot(x_values, signal_array.ravel()) 
+        plt.title('Plot of the Array') 
+        plt.xlabel('Time') 
+        plt.ylabel('Value')
+        plt.grid(True)
+        plt.show()
