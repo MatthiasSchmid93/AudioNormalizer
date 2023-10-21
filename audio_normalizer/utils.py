@@ -231,7 +231,6 @@ class File:
         channels=file_data["channels"]
         )
 
-        # Export the audio to an AIFF file
         new_audio.export(f"{folder}/Normalized Files/{file_data['filename']}.{format}", format=format, bitrate="320k")
 
     @staticmethod
