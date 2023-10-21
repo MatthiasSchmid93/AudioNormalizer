@@ -164,7 +164,7 @@ class RefreshWindow:
         return user_folder
 
     @staticmethod
-    def on_click_choose_folder():
+    def on_click_choose_folder() -> str:
         _main_window.Element("completed").Update("", text_color="green")
         
         user_folder = RefreshWindow.popup_explorer()
@@ -178,7 +178,7 @@ class RefreshWindow:
         return user_folder
 
     @staticmethod
-    def on_click_normalize():
+    def on_click_normalize() -> None:
         if not normalizer.progress.terminate:
             _main_window.Element("completed").Update("", text_color="green")
             _main_window.Element("choose_folder").Update(disabled=True)
@@ -194,17 +194,17 @@ class RefreshWindow:
             )
             
     @staticmethod
-    def on_click_aiff():
+    def on_click_aiff() -> None:
         _main_window.Element("aiff").Update(button_color=(("white on blue")))
         _main_window.Element("mp3").Update(button_color=(("black on white")))
         
     @staticmethod
-    def on_click_mp3():
+    def on_click_mp3() -> None:
         _main_window.Element("mp3").Update(button_color=(("white on blue")))
         _main_window.Element("aiff").Update(button_color=(("black on white")))
 
     @staticmethod
-    def normalizer_progress():
+    def normalizer_progress() -> None:
         while normalizer.progress.running:
             sleep(0.2)
             _main_window.Element("-PROGRESS_BAR-").Update(
