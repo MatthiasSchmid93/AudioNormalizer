@@ -15,6 +15,7 @@ class ProgressHandler:
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(ProgressHandler, cls).__new__(cls)
+            cls._instance._format = "aiff"
             cls._instance.reset() 
         return cls._instance  
 
@@ -183,7 +184,7 @@ class File:
 
     @staticmethod
     @ProgressHandler.update_bar
-    def write_tags(file: str, folder: str) -> None:
+    def write_tags(file: str, folder: str, format: str) -> None:
         file, ext = os.path.splitext(file)
         
         try:
@@ -193,7 +194,7 @@ class File:
             return None
             
         file = file.replace("â€“", "&")
-        tags = AIFF()
+        tags = {"aiff": AIFF(), "mp3": ID3()}[format]
         tag_map = {
             "TIT2": TIT2,
             "TBPM": TBPM,
@@ -218,11 +219,11 @@ class File:
         except IndexError:
             print("Album Cover not found")
         
-        tags.save(f"{folder}/Normalized Files/{file}.aiff", v2_version=3)
+        tags.save(f"{folder}/Normalized Files/{file}.{format}", v2_version=3)
 
     @staticmethod
     @ProgressHandler.update_bar
-    def save_as_aiff(signal_array: np.ndarray, file_data: dict, folder: str) -> None:
+    def save_as(signal_array: np.ndarray, file_data: dict, folder: str, format: str) -> None:
         new_audio = AudioSegment(
         signal_array.tobytes(),
         frame_rate=file_data["frame_rate"],
@@ -231,7 +232,7 @@ class File:
         )
 
         # Export the audio to an AIFF file
-        new_audio.export(f"{folder}/Normalized Files/{file_data['filename']}.aiff", format="aiff")
+        new_audio.export(f"{folder}/Normalized Files/{file_data['filename']}.{format}", format=format, bitrate="320k")
 
     @staticmethod
     def count_availible_files(folder: str) -> int:

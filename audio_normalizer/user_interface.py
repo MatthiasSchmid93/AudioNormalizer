@@ -3,9 +3,14 @@ import PySimpleGUI as sg
 import sys
 from time import sleep
 import normalizer
+from pathlib import Path
 
 sg.theme("Black")
 sg.set_options(dpi_awareness=True)
+
+
+repo_root_dir = Path(__file__).resolve().parent.parent
+ICON = repo_root_dir / "assets" / "nor.png"
 
 
 # switch object sizes from the ui for low resolution or high resolution screens
@@ -105,6 +110,26 @@ def main_window(resolution: int) -> sg.Window:
                 pad=(win_lay.main_win_but_learn[resolution][0], 2),
                 size=(15, 1),
             ),
+            sg.Text(
+                "Save as",
+                pad=(win_lay.main_win_txt_info[resolution][0], 1),
+                font=("", 9),
+            ),
+            sg.Button(
+                key="aiff",
+                button_text="AIFF",
+                button_color=(("white on blue")),
+                border_width=0,
+                pad=(win_lay.main_win_but_learn[resolution][0], 2),
+                size=(5, 1),
+            ),
+            sg.Button(
+                key="mp3",
+                button_text="MP3",
+                border_width=0,
+                pad=(win_lay.main_win_but_learn[resolution][0], 2),
+                size=(5, 1),
+            ),
         ],
     ]
     return sg.Window(
@@ -112,7 +137,7 @@ def main_window(resolution: int) -> sg.Window:
         layout,
         no_titlebar=False,
         finalize=True,
-        titlebar_icon="./assets/nor.png",
+        titlebar_icon=ICON,
         size=(win_lay.main_win_win[resolution][0], win_lay.main_win_win[resolution][1]),
         titlebar_text_color="#ffffff",
         use_custom_titlebar=True,
@@ -167,6 +192,16 @@ class RefreshWindow:
             _main_window.Element("normalize").Update(
                 ("TERMINATING..."), button_color=(("white on blue")), disabled=True
             )
+            
+    @staticmethod
+    def on_click_aiff():
+        _main_window.Element("aiff").Update(button_color=(("white on blue")))
+        _main_window.Element("mp3").Update(button_color=(("black on white")))
+        
+    @staticmethod
+    def on_click_mp3():
+        _main_window.Element("mp3").Update(button_color=(("white on blue")))
+        _main_window.Element("aiff").Update(button_color=(("black on white")))
 
     @staticmethod
     def normalizer_progress():

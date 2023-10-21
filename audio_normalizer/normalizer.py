@@ -214,7 +214,7 @@ def normalize_signal(signal_array: any, channels: int, frame_rate: int, sample_w
         threshold = Normalizer.find_transient_threshold(
             signal_array, frame_rate
         )
-        Plot.plot_find_transient_threshold(signal_array, threshold)
+        #Plot.plot_find_transient_threshold(signal_array, threshold)
         transients = Normalizer.find_transients(signal_array, threshold)
         
         # Removes transients that are directly next to each other. 
@@ -244,7 +244,7 @@ def normalize_signal(signal_array: any, channels: int, frame_rate: int, sample_w
 progress = ProgressHandler()
 
 
-def normalize_file(file: str, folder: str) -> None:
+def normalize_file(file: str, folder: str, format: str) -> None:
     File.check_folder(folder)
     
     if audio_file_data := File.open_audio(file, folder):
@@ -256,8 +256,8 @@ def normalize_file(file: str, folder: str) -> None:
             audio_file_data["sample_width"]
         )
         
-        File.save_as_aiff(normalized_signal, audio_file_data, folder)
-        File.write_tags(file, folder)
+        File.save_as(normalized_signal, audio_file_data, folder, format)
+        File.write_tags(file, folder, format)
         
         
 def normalize_folder(folder) -> None:
@@ -278,7 +278,7 @@ def normalize_folder(folder) -> None:
             return None
         
         if file not in done_files:
-            normalize_file(f"{file}{ext}", folder)
+            normalize_file(f"{file}{ext}", folder, progress._format)
                 
         progress.bar = 0
         

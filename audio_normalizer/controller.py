@@ -24,6 +24,14 @@ def main():
                 
         if event == "choose_folder":
             user_folder = RefreshWindow.on_click_choose_folder()
+            
+        if event == "aiff":
+            RefreshWindow.on_click_aiff()
+            progress._format = "aiff"
+            
+        if event == "mp3":
+            RefreshWindow.on_click_mp3()
+            progress._format = "mp3"
 
 
 if __name__ == "__main__":
