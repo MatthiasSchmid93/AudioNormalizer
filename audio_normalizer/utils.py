@@ -1,4 +1,4 @@
-from mutagen.id3 import ID3, APIC, TIT2, TBPM, TKEY, TPE1, TPUB, TSSE, TRCK, TCON , APIC
+from mutagen.id3 import ID3, APIC, TIT2, TBPM, TKEY, TPE1, TPUB, TSSE, TRCK, TCON ,APIC
 from mutagen.aiff import AIFF
 import os
 from pydub import AudioSegment
