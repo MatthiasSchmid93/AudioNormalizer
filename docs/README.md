@@ -14,4 +14,4 @@ At this stage, the program finds all amplitudes in the original split signals wh
 
 Finally, all the amplified split signals are merged together and are saved as the original file name and type. All the ID3 tags, including the album cover,     are also maintained in the new normalized file.
 
-As a result, the user gets an audiofile normalized to 0 dB without losing the dynamic range or the overall audio quality.
+As a result, the user gets an audiofile normalized to 0 dB without losing noticeable dynamic range or the overall audio quality.
