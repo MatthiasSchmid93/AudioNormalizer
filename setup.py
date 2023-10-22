@@ -15,6 +15,7 @@ setup(
         "PySimpleGUI==4.60.5",
         "scipy==1.9.1",
         "jsonschema>=3.2.0",
+        "matplotlib==3.5.2",
     ],
     package_data={'audio_normalizer': ['assets/*']},
     author='Matthias Christopher Schmid',
