@@ -19,7 +19,7 @@ All amplitudes that exceed (clip) above 0 dB are lowered to 0 dB without manipul
 Finally, all the amplified split signals are merged together and are saved as the original file name and type. 
 All the ID3 tags, including the album cover, are also maintained in the new normalized file.
 
-As a result, the user gets an audiofile normalized to 0 dB without losing the dynamic range or the overall audio quality.
+As a result, the user gets an audiofile normalized to 0 dB without losing noticeable dynamic range or the overall audio quality.
 """
 
 
@@ -52,12 +52,18 @@ class Normalizer:
         """
         # TODO Find better algorithm
         blocks_max = []
+        global_max = signal_array.max()
         
         for i in range(0, signal_array.size, frame_rate):
             block = signal_array[i : i + frame_rate]
             blocks_max.append(int(block.max()))
             threshold = int(sum(blocks_max) / len(blocks_max))
             
+        threshold - (global_max - threshold)
+            
+        filtered_list = [x for x in blocks_max if x >= threshold]
+        threshold = int(sum(filtered_list) / len(filtered_list))   
+         
         return threshold
 
     @staticmethod
@@ -271,12 +277,13 @@ def normalize_folder(folder) -> None:
         return 1
 
     for file in os.listdir(f"{folder}"):
-
+        file_name, _ = os.path.splitext(file)
+        
         if progress.terminate:
             progress.reset()
             return None
         
-        if file not in done_files:
+        if file_name not in done_files:
             normalize_file(file, folder, progress._format)
                 
         progress.bar = 0
