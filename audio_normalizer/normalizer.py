@@ -46,7 +46,7 @@ class Normalizer:
         return {1: 127, 2: 32767, 4: 2147483647}[sample_width]
         
     @staticmethod
-    def find_transient_threshold(signal_array: np.ndarray, frame_rate: int) -> list:
+    def find_transient_threshold(signal_array: np.ndarray, frame_rate: int) -> int:
         """
         Calculate a transient threshold based on the maximum values in equal-sized frames of a signal array.
         """
@@ -74,7 +74,7 @@ class Normalizer:
         return np.where(signal_array >= threshold)[0]
 
     @staticmethod
-    def find_amplitudes(signal_array: np.ndarray, transients: np.ndarray) -> list:
+    def find_amplitudes(signal_array: np.ndarray, transients: np.ndarray) -> list[list[int]]:
         """
         Determine amplitudes within a signal array given specific transients.
         """
@@ -96,7 +96,7 @@ class Normalizer:
         return amplitudes.tolist()
 
     @staticmethod
-    def find_amplification_factor(signal_array: np.ndarray, amplitudes: list, maximum_value: int) -> list:
+    def find_amplification_factor(signal_array: np.ndarray, amplitudes: list, maximum_value: int) -> float:
         """
         Find a factor to amplify a signal array while considering designated amplitude regions.
         """
@@ -162,7 +162,7 @@ class Normalizer:
     
     @staticmethod
     @ProgressHandler.update_bar
-    def prepare_signal(signal_array: np.ndarray, channels: int, data_type: np.dtype, max_value: int) -> list:
+    def prepare_signal(signal_array: np.ndarray, channels: int, data_type: np.dtype, max_value: int) -> list[np.ndarray]:
         """
         Prepare original signal array for the normalizing process.
         """
@@ -188,7 +188,7 @@ class Normalizer:
 
     @staticmethod
     @ProgressHandler.update_bar
-    def undo_prepare_signal(signal_arrays: list, channels: int, data_type: np.dtype) -> np.ndarray:
+    def undo_prepare_signal(signal_arrays: list[np.ndarray], channels: int, data_type: np.dtype) -> np.ndarray:
         """
         Convert the prepared signal arrays back to the original structure
         """
@@ -214,6 +214,7 @@ def normalize_signal(signal_array: any, channels: int, frame_rate: int, sample_w
     
     signal_array = ArrayModifiers.array_to_numpy_array(signal_array, data_type)
     signal_array = ArrayModifiers.reshape_to_channels(signal_array, channels)
+    
     signal_arrays = Normalizer.prepare_signal(signal_array, channels, data_type, max_value)
     
     for signal_array in signal_arrays:
