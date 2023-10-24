@@ -4,7 +4,7 @@ from .normalizer import progress, normalize_folder
 from .user_interface import _main_window, RefreshWindow
 
  
-def main():
+def main() -> None:
     while True:
         event, _ = _main_window.read()
         

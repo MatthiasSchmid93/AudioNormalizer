@@ -60,17 +60,17 @@ class ArrayModifiers:
             array[array == equal] = value
 
     @staticmethod
-    def replace_negatives_with_value(arrays: list, indices: list, value) -> None:
+    def replace_negatives_with_value(arrays: list[np.ndarray], indices: list, value) -> None:
         for i in indices:
             arrays[i][arrays[i] < 0] = value
 
     @staticmethod
-    def replace_positives_with_value(arrays: list, indices: list, value) -> None:
+    def replace_positives_with_value(arrays: list[np.ndarray], indices: list, value) -> None:
         for i in indices:
             arrays[i][arrays[i] >= 0] = value
 
     @staticmethod
-    def positive_to_negative(arrays: list, indices: list) -> None:
+    def positive_to_negative(arrays: list[np.ndarray], indices: list) -> None:
         """
         All positive values are converted to negative.
         """
@@ -78,7 +78,7 @@ class ArrayModifiers:
             arrays[i] = np.where(arrays[i] > 0, -arrays[i], arrays[i])
     
     @staticmethod
-    def negative_to_positive(arrays: list, indices: list, max_value: int) -> None:
+    def negative_to_positive(arrays: list[np.ndarray], indices: list, max_value: int) -> None:
         """
         All negative values are converted to positive.
         """
@@ -92,7 +92,7 @@ class ArrayModifiers:
             arrays[i] = np.where(arrays[i] < 0, np.abs(arrays[i]), arrays[i])
             
     @staticmethod
-    def delete_values(arrays: list, values: list) -> list:
+    def delete_values(arrays: list[np.ndarray], values: list) -> list:
         new_arrays = []
         
         for arr in arrays:
@@ -102,7 +102,7 @@ class ArrayModifiers:
         return new_arrays
 
     @staticmethod
-    def combine_arrays(array_pair: list) -> np.ndarray:
+    def combine_arrays(array_pair: list[np.ndarray]) -> np.ndarray:
         """
         Combines two arrays into a single array with paired columns.
         """
@@ -134,7 +134,7 @@ class ArrayModifiers:
         return split_arrays
 
     @staticmethod
-    def merge_split_arrays(split_arrays: list, channels: int, data_type: np.dtype) -> list:
+    def merge_split_arrays(split_arrays: list[np.ndarray], channels: int, data_type: np.dtype) -> list:
         """
         Merges previously split audio channels back into their original array structure.
         """
