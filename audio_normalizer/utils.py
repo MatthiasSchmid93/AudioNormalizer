@@ -89,7 +89,7 @@ class ArrayModifiers:
             
         for i in indices:
             arrays[i] = int_overflow_protection(arrays[i], max_value)
-            arrays[i] = np.where(arrays[i] < 0, np.abs(arrays[i]), arrays[i])
+            arrays[i] = np.abs(arrays[i])
             
     @staticmethod
     def delete_values(arrays: list[np.ndarray], values: list) -> list:

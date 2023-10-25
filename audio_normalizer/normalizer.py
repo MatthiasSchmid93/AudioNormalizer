@@ -82,21 +82,32 @@ class Normalizer:
         # Find beginning and ending of the amplitudes in wich the transients are sitting
         indices_of_ones = np.where(signal_array == 1)[0]
         all_indices = np.searchsorted(indices_of_ones, transients)
-        before_indices = all_indices - 1
-        after_indices = all_indices
         
-        try:
-            amplitudes = np.column_stack(
-                (indices_of_ones[before_indices], indices_of_ones[after_indices])
-            )
-        except IndexError:
-            return None
+        amplitudes = []
         
-        amplitudes = np.delete(amplitudes, 0, axis=0)
-        return amplitudes.tolist()
+        # Go through all indices and find the amplitudes while checking the boundaries
+        for idx in all_indices:
+            before_index = idx - 1
+            after_index = idx
+
+            # Check the lower boundary
+            if before_index < 0:
+                start_idx = 0
+            else:
+                start_idx = indices_of_ones[before_index]
+
+            # Check the upper boundary
+            if after_index >= len(indices_of_ones):
+                end_idx = len(indices_of_ones)
+            else:
+                end_idx = indices_of_ones[after_index]
+            
+            amplitudes.append([start_idx, end_idx])
+
+        return amplitudes
 
     @staticmethod
-    def find_amplification_factor(signal_array: np.ndarray, amplitudes: list, maximum_value: int) -> float:
+    def find_amplification_factor(signal_array: np.ndarray, amplitudes: list, max_value: int) -> float:
         """
         Find a factor to amplify a signal array while considering designated amplitude regions.
         """
@@ -106,18 +117,18 @@ class Normalizer:
             masked_signal_array[start:end] = 0
 
         amplification_factor = np.float32(
-            maximum_value / np.max(masked_signal_array)
+            max_value / np.max(masked_signal_array)
         )
         
         if amplification_factor < 1:
             amplification_factor = 1.0
-            
+        
         return amplification_factor
 
     @staticmethod
     @ProgressHandler.update_bar
     def amplify(
-        signal_array: np.ndarray, amplification_factor: float, amplitudes: list, max_value: int
+        signal_array: np.ndarray, amplification_factor: float, amplitudes: list[list], max_value: int
     ) -> None:
         """
         Amplify a signal array while considering designated amplitude regions and an amplification factor.
@@ -128,30 +139,40 @@ class Normalizer:
         LAST_AMP = amplitudes[-1][1]
 
         def amplify_segment(start: int, end: int, factor: float) -> None:
-            # Floating point amplification for the best result
+             # Convert to float for precision during amplification
             segment = signal_array[start:end].astype(float)
+            # Identify where the signal is above the threshold
             above_threshold = segment > 3
-            segment[above_threshold] *= factor
-            segment = np.round(segment)
-            signal_array[start:end] = segment
-
-        amplify_segment(AUDIO_START, FIRST_AMP, amplification_factor)
+            # Amplify only where the signal is above the threshold
+            segment[above_threshold] *= factor  
+            # Clip to maintain within the valid range, considering the original data type
+            np.clip(segment, -max_value, max_value, out=segment)
+            # Rounding and type conversion: rounding is done post-clipping to ensure to stay within limits
+            signal_array[start:end] = np.round(segment).astype(signal_array.dtype)
+            
+        if AUDIO_START != FIRST_AMP:
+            amplify_segment(AUDIO_START, FIRST_AMP, amplification_factor)
 
         for i, (start, end) in enumerate(amplitudes):
-            segment = signal_array[start:end] * amplification_factor
-            
-            if segment.max() > max_value:
-                factor = max_value / (segment.max() / amplification_factor)
+            if start == end:
+                continue
+
+            # Calculate the adjusted amplification factor to avoid overflow
+            segment_max = np.max(np.abs(signal_array[start:end]))  # Find the max value in the current segment
+            if segment_max * amplification_factor > max_value:
+                factor = max_value / segment_max
             else:
                 factor = amplification_factor
-                
+
             amplify_segment(start, end, factor)
-            
+
+            # Handling the segments between the specified amplitudes
             if i + 1 < len(amplitudes):
                 next_start = amplitudes[i + 1][0]
                 amplify_segment(end, next_start, amplification_factor)
 
-        amplify_segment(LAST_AMP, AUDIO_END, amplification_factor)
+        if LAST_AMP != AUDIO_END:
+            amplify_segment(LAST_AMP, AUDIO_END, amplification_factor)
 
     @staticmethod
     def check_for_clipping(signal_array: np.ndarray, max_value: int) -> None:
@@ -236,10 +257,10 @@ def normalize_signal(signal_array: any, channels: int, frame_rate: int, sample_w
             # Nothing to amplify
             if amplification_factor == 1.0:
                 continue
-            
             try:
                 Normalizer.amplify(signal_array, amplification_factor, amplitudes, max_value)
             except:
+                print("Amplification error")
                 continue
             
             Normalizer.check_for_clipping(signal_array, max_value)
