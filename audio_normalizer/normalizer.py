@@ -33,9 +33,8 @@ class Normalizer:
     def get_data_type(sample_width: int) -> np.dtype:
         """
         Gets the data type for all the arrays, based on the origin signal data type.
-        Sample width 1 == 1 byte == 8 bit == int8,...
         """
-        return {1: np.int8, 2: np.int16, 4: np.int32}[sample_width]
+        return {8: np.int8, 16: np.int16, 32: np.int32}[sample_width]
     
     @staticmethod
     def get_max_value(sample_width: int) -> int:
@@ -43,7 +42,7 @@ class Normalizer:
         (int(((1 << bits) - 1) / 2)
         Maximum value that can be represented given the sample width
         """
-        return {1: 127, 2: 32767, 4: 2147483647}[sample_width]
+        return {8: 127, 16: 32767, 32: 2147483647}[sample_width]
         
     @staticmethod
     def find_transient_threshold(signal_array: np.ndarray, frame_rate: int) -> int:
@@ -312,7 +311,3 @@ def normalize_folder(folder) -> None:
         
     progress.reset()
     return None
-
-
-if __name__ == "__main__":
-    normalize_folder("./")

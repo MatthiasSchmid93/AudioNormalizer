@@ -1,9 +1,11 @@
 from mutagen.id3 import ID3, APIC, TIT2, TBPM, TKEY, TPE1, TPUB, TSSE, TRCK, TCON ,APIC
 from mutagen.aiff import AIFF
 import os
-from pydub import AudioSegment
 import numpy as np
 import matplotlib.pyplot as plt
+import subprocess
+import sys
+import json
 
 
 class ProgressHandler:
@@ -20,7 +22,7 @@ class ProgressHandler:
         return cls._instance  
 
     def reset(self) -> None:
-        self.bar = 0  # Represents the progress bar's current value.
+        self.bar = 0  # Represents the progress bar"s current value.
         self.running = False  # A flag indicating whether the process is running.
         self.terminate = False  # A flag indicating whether the process should be stopped.
         self.current_file = ""  # The name of the file currently being processed.
@@ -156,28 +158,86 @@ class File:
     @staticmethod
     @ProgressHandler.update_bar
     def open_audio(file: str, folder: str) -> dict:
+        """
+        Retrieve audio file information using FFprobe.
+        """
+        def get_bit_depth(sample_width: int) -> str:
+            return {8: "u8", 16: "s16le", 32: "s32le"}[sample_width]
+        
         name, ext = os.path.splitext(file)
         name = name.replace("â€“", "&")
         
         if ext.lower() not in {".mp3", ".wav"}:
             return None
         
-        try:
-            if ext.lower() == ".mp3":
-                audio = AudioSegment.from_mp3(f"{folder}/{file}")
-                
-            elif ext.lower() == ".wav":
-                audio = AudioSegment.from_wav(f"{folder}/{file}")
-                
-        except (FileNotFoundError, PermissionError, IsADirectoryError, ValueError):
-            return None
+        startupinfo = None
+        if sys.platform.startswith("win"):
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+
+        # Construct command to retrieve JSON-formatted information about the audio file
+        get_infos = [
+            "ffprobe",
+            # Do not print any information to standard error
+            "-v", "quiet",
+            # Output in JSON format
+            "-print_format", "json",
+            # Show format/container information
+            "-show_format",
+            # Show streams (audio, video, etc.) information
+            "-show_streams",
+            f"{folder}/{file}"
+        ]
+
+        # Run the command and capture the output
+        infos = subprocess.run(
+            get_infos, 
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.PIPE,
+            startupinfo=startupinfo,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform.startswith("win") else 0,
+            text=True
+        )
+
+        # If the command was successful, parse the information from JSON format
+        if infos.returncode == 0:
+            audio_infos = json.loads(infos.stdout)["streams"][0]   
+        else:
+            raise Exception(f"FFprobe command failed with: {infos.stderr}")
+        
+        if audio_infos.get("bits_per_sample") == 0:
+            bit_depth = 16
+        else:
+            bit_depth = audio_infos.get("bits_per_sample")
+            
+        # Construct command to get raw audio data through FFmpeg
+        get_signal = [
+            "ffmpeg",
+            "-i", f"{folder}/{file}",
+            "-f", str(get_bit_depth(bit_depth)),
+            "-acodec", str(f"pcm_{get_bit_depth(bit_depth)}"),
+            "-ar", str(audio_infos.get("sample_rate")), 
+            "-ac", str(audio_infos.get("channels")),
+            "-",  # Output to stdout
+        ]
+        
+        process = subprocess.run(
+            get_signal, 
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.PIPE,
+            startupinfo=startupinfo,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform.startswith("win") else 0, 
+            check=True)
+
+        # Read the stdout of the subprocess as a NumPy array
+        audio_as_np_array = np.frombuffer(process.stdout, dtype=np.int16)
 
         file_data = {
             "filename": name,
-            "signal_array": audio.get_array_of_samples(),
-            "channels": audio.channels,
-            "sample_width": audio.sample_width,
-            "frame_rate": audio.frame_rate,
+            "signal_array": audio_as_np_array,
+            "channels": int(audio_infos.get("channels")),
+            "sample_width": int(bit_depth),
+            "frame_rate": int(audio_infos.get("sample_rate")),
         }
         
         return file_data
@@ -224,14 +284,52 @@ class File:
     @staticmethod
     @ProgressHandler.update_bar
     def save_as(signal_array: np.ndarray, file_data: dict, folder: str, format: str) -> None:
-        new_audio = AudioSegment(
-        signal_array.tobytes(),
-        frame_rate=file_data["frame_rate"],
-        sample_width=file_data["sample_width"],
-        channels=file_data["channels"]
-        )
+        
+        def get_bit_depth(sample_width: int) -> str:
+            return {8: "u8", 16: "s16le", 32: "s32le"}[sample_width]
+        """
+        Encode raw audio data using FFmpeg.
+        """
+        # Define the command for FFmpeg in a list. Each command line option is a new list item.
+        command = [
+            "ffmpeg",
+            
+            # Overwrite output file if it exists
+            "-y",
+             # Format of input data
+            "-f", get_bit_depth(file_data["sample_width"]),
+            # Input audio codec 
+            "-acodec", f"pcm_{get_bit_depth(file_data['sample_width'])}",
+            "-ar", str(file_data["frame_rate"]),
+            "-ac", str(file_data["channels"]),
+            # Input comes from the standard input
+            "-i", "-",
+            # No video content
+            "-vn",
+            # Output filename
+            f"{folder}/Normalized Files/{file_data['filename']}.{format}",
+        ]
+        
+        # Prepare the startupinfo parameter to prevent a console window
+        startupinfo = None
+        if sys.platform.startswith("win"):
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
 
-        new_audio.export(f"{folder}/Normalized Files/{file_data['filename']}.{format}", format=format, bitrate="320k")
+        # Start FFmpeg and send the audio data through the pipe
+        process = subprocess.Popen(
+            command, 
+            stdin=subprocess.PIPE, 
+            stderr=subprocess.PIPE,
+            startupinfo=startupinfo,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform.startswith("win") else 0
+        )
+        
+        _, err = process.communicate(input=signal_array.tobytes())
+
+        if process.returncode != 0:
+            print(f"FFmpeg returned an error: {err.decode()}")
+
 
     @staticmethod
     def count_availible_files(folder: str) -> int:
@@ -267,10 +365,10 @@ class Plot:
 
         plt.figure()
         plt.plot(x_values, signal_array.ravel())
-        plt.axhline(y=threshold, color='r', linestyle='-')
-        plt.title('Plot of the Array') 
-        plt.xlabel('Time') 
-        plt.ylabel('Value')
+        plt.axhline(y=threshold, color="r", linestyle="-")
+        plt.title("Plot of the Array") 
+        plt.xlabel("Time") 
+        plt.ylabel("Value")
         plt.grid(True)
         plt.show()
 
@@ -281,8 +379,8 @@ class Plot:
 
         plt.figure()
         plt.plot(x_values, signal_array.ravel()) 
-        plt.title('Plot of the Array') 
-        plt.xlabel('Time') 
-        plt.ylabel('Value')
+        plt.title("Plot of the Array") 
+        plt.xlabel("Time") 
+        plt.ylabel("Value")
         plt.grid(True)
         plt.show()
