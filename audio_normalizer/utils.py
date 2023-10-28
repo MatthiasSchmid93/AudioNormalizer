@@ -22,10 +22,14 @@ class ProgressHandler:
         return cls._instance  
 
     def reset(self) -> None:
-        self.bar = 0  # Represents the progress bar"s current value.
-        self.running = False  # A flag indicating whether the process is running.
-        self.terminate = False  # A flag indicating whether the process should be stopped.
-        self.current_file = ""  # The name of the file currently being processed.
+        # Represents the progress bar"s current value.
+        self.bar = 0
+        # A flag indicating whether the process is running.
+        self.running = False
+        # A flag indicating whether the process should be stopped.
+        self.terminate = False 
+        # The name of the file currently being processed.
+        self.current_file = "" 
 
     @staticmethod
     def update_bar(func) -> any:
@@ -159,7 +163,7 @@ class File:
     @ProgressHandler.update_bar
     def open_audio(file: str, folder: str) -> dict:
         """
-        Retrieve audio file information using FFprobe.
+        Retrieve audio file information using FFprobe and FFmpeg.
         """
         def get_bit_depth(sample_width: int) -> str:
             return {8: "u8", 16: "s16le", 32: "s32le"}[sample_width]
@@ -190,20 +194,20 @@ class File:
         ]
 
         # Run the command and capture the output
-        infos = subprocess.run(
+        get_info_process = subprocess.run(
             get_infos, 
             stdout=subprocess.PIPE, 
             stderr=subprocess.PIPE,
             startupinfo=startupinfo,
             creationflags=subprocess.CREATE_NO_WINDOW if sys.platform.startswith("win") else 0,
-            text=True
+            encoding="utf-8"
         )
 
         # If the command was successful, parse the information from JSON format
-        if infos.returncode == 0:
-            audio_infos = json.loads(infos.stdout)["streams"][0]   
+        if get_info_process.returncode == 0:
+            audio_infos = json.loads(get_info_process.stdout)["streams"][0]   
         else:
-            raise Exception(f"FFprobe command failed with: {infos.stderr}")
+            raise Exception(f"FFprobe command failed with: {get_info_process.stderr}")
         
         if audio_infos.get("bits_per_sample") == 0:
             bit_depth = 16
@@ -221,7 +225,7 @@ class File:
             "-",  # Output to stdout
         ]
         
-        process = subprocess.run(
+        get_signal_process = subprocess.run(
             get_signal, 
             stdout=subprocess.PIPE, 
             stderr=subprocess.PIPE,
@@ -230,7 +234,7 @@ class File:
             check=True)
 
         # Read the stdout of the subprocess as a NumPy array
-        audio_as_np_array = np.frombuffer(process.stdout, dtype=np.int16)
+        audio_as_np_array = np.frombuffer(get_signal_process.stdout, dtype=np.int16)
 
         file_data = {
             "filename": name,
@@ -275,7 +279,12 @@ class File:
                 
         try:
             pict = tags_old.getall("APIC")[0].data
-            tags["APIC"] = APIC(encoding=3, mime="image/jpg", type=3, desc="Cover", data=pict)
+            tags["APIC"] = APIC(
+                encoding=3, 
+                mime="image/jpg", 
+                type=3, desc="Cover", 
+                data=pict
+            )
         except IndexError:
             print("Album Cover not found")
         

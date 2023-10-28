@@ -292,12 +292,12 @@ def normalize_folder(folder) -> None:
     done_files = File.check_folder(folder)
     
     try:
-        os.listdir(f"{folder}")
+        os.listdir(folder)
     except FileNotFoundError:
         progress.reset()
         return 1
 
-    for file in os.listdir(f"{folder}"):
+    for file in os.listdir(folder):
         file_name, _ = os.path.splitext(file)
         
         if progress.terminate:
